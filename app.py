@@ -8,6 +8,7 @@ import sqlite3
 import pandas as pd
 import hashlib
 import os
+import tempfile
 from datetime import datetime, timedelta
 import jdatetime
 import plotly.express as px
@@ -1299,6 +1300,295 @@ def users_page():
     
     conn.close()
 
+# ==================== مدیریت داده ====================
+def data_management_page():
+    """صفحه مدیریت داده و انتقال دیتابیس"""
+    st.markdown("### 💾 مدیریت داده")
+    
+    tab1, tab2, tab3 = st.tabs(["📤 انتقال از دیتابیس قدیم", "📊 آمار دیتابیس", "🗑️ پاک‌سازی"])
+    
+    with tab1:
+        st.markdown("#### 📤 انتقال داده از نسخه دسکتاپ")
+        st.info("""
+        فایل `warehouse_v2.db` را از کامپیوتر خود آپلود کنید.
+        تمام داده‌ها شامل کالاها، ورودی‌ها، خروجی‌ها، مراکز فروش و تراکنش‌ها منتقل می‌شوند.
+        """)
+        
+        uploaded_file = st.file_uploader("فایل دیتابیس را انتخاب کنید", type=['db'])
+        
+        if uploaded_file is not None:
+            st.warning("⚠️ این عملیات داده‌های موجود را پاک کرده و داده‌های جدید را جایگزین می‌کند!")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                replace_data = st.checkbox("داده‌های قبلی پاک شوند", value=True)
+            
+            if st.button("🚀 شروع انتقال", type="primary", use_container_width=True):
+                try:
+                    # ذخیره فایل آپلود شده
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as tmp_file:
+                        tmp_file.write(uploaded_file.getvalue())
+                        tmp_path = tmp_file.name
+                    
+                    # اتصال به دیتابیس قدیم
+                    old_conn = sqlite3.connect(tmp_path)
+                    old_conn.row_factory = sqlite3.Row
+                    old_cursor = old_conn.cursor()
+                    
+                    # اتصال به دیتابیس جدید
+                    new_conn = get_connection()
+                    new_cursor = new_conn.cursor()
+                    
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    
+                    # پاک‌سازی داده‌های قبلی اگر انتخاب شده
+                    if replace_data:
+                        status_text.text("🗑️ پاک‌سازی داده‌های قبلی...")
+                        new_cursor.execute("DELETE FROM outflows")
+                        new_cursor.execute("DELETE FROM inflows")
+                        new_cursor.execute("DELETE FROM products")
+                        new_cursor.execute("DELETE FROM sales_centers WHERE id > 0")
+                        new_cursor.execute("DELETE FROM settlements")
+                        new_cursor.execute("DELETE FROM cash_transactions")
+                        new_cursor.execute("DELETE FROM commission_categories")
+                        new_cursor.execute("DELETE FROM commissions")
+                        new_cursor.execute("DELETE FROM product_categories")
+                        new_conn.commit()
+                    
+                    progress_bar.progress(10)
+                    
+                    # انتقال محصولات
+                    status_text.text("📦 انتقال محصولات...")
+                    try:
+                        products = old_cursor.execute("SELECT id, name, color, barcode, stock FROM products").fetchall()
+                        for p in products:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO products (id, name, color, barcode, stock)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (p['id'], p['name'], p['color'], p['barcode'], p['stock']))
+                        st.success(f"✅ {len(products)} کالا منتقل شد")
+                    except Exception as e:
+                        st.warning(f"⚠️ خطا در انتقال محصولات: {e}")
+                    
+                    progress_bar.progress(25)
+                    
+                    # انتقال مراکز فروش
+                    status_text.text("🏪 انتقال مراکز فروش...")
+                    try:
+                        centers = old_cursor.execute("SELECT * FROM sales_centers").fetchall()
+                        for c in centers:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO sales_centers (id, name, commission_percent, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (c['id'], c['name'], c['commission_percent'] if 'commission_percent' in c.keys() else 7,
+                                  c['shipping_type'] if 'shipping_type' in c.keys() else 'manual',
+                                  c['shipping_percent'] if 'shipping_percent' in c.keys() else 0,
+                                  c['shipping_min'] if 'shipping_min' in c.keys() else 0,
+                                  c['shipping_max'] if 'shipping_max' in c.keys() else 0,
+                                  c['shipping_fixed'] if 'shipping_fixed' in c.keys() else 0))
+                        st.success(f"✅ {len(centers)} مرکز فروش منتقل شد")
+                    except Exception as e:
+                        st.warning(f"⚠️ خطا در انتقال مراکز: {e}")
+                    
+                    progress_bar.progress(40)
+                    
+                    # انتقال ورودی‌ها
+                    status_text.text("📥 انتقال ورودی‌ها...")
+                    try:
+                        inflows = old_cursor.execute("SELECT * FROM inflows").fetchall()
+                        for i in inflows:
+                            dollar_rate = i['dollar_rate'] if 'dollar_rate' in i.keys() else 0
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO inflows (id, product_id, quantity, remaining_quantity, buy_price, dollar_rate, inflow_date)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (i['id'], i['product_id'], i['quantity'], i['remaining_quantity'], 
+                                  i['buy_price'], dollar_rate, i['inflow_date']))
+                        st.success(f"✅ {len(inflows)} ورودی منتقل شد")
+                    except Exception as e:
+                        st.warning(f"⚠️ خطا در انتقال ورودی‌ها: {e}")
+                    
+                    progress_bar.progress(60)
+                    
+                    # انتقال خروجی‌ها
+                    status_text.text("📤 انتقال خروجی‌ها...")
+                    try:
+                        outflows = old_cursor.execute("SELECT * FROM outflows").fetchall()
+                        for o in outflows:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO outflows (id, product_id, center_id, quantity, sell_price, cogs_unit, 
+                                    commission_amount, shipping_cost, outflow_date, order_number, is_returned, is_paid)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (o['id'], o['product_id'], o['center_id'], o['quantity'], o['sell_price'],
+                                  o['cogs_unit'], o['commission_amount'], o['shipping_cost'], o['outflow_date'],
+                                  o['order_number'] if 'order_number' in o.keys() else '',
+                                  o['is_returned'] if 'is_returned' in o.keys() else 0,
+                                  o['is_paid'] if 'is_paid' in o.keys() else 0))
+                        st.success(f"✅ {len(outflows)} خروجی منتقل شد")
+                    except Exception as e:
+                        st.warning(f"⚠️ خطا در انتقال خروجی‌ها: {e}")
+                    
+                    progress_bar.progress(75)
+                    
+                    # انتقال تسویه‌ها
+                    status_text.text("💵 انتقال تسویه‌ها...")
+                    try:
+                        settlements = old_cursor.execute("SELECT * FROM settlements").fetchall()
+                        for s in settlements:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO settlements (id, center_id, amount, settlement_date, description)
+                                VALUES (?, ?, ?, ?, ?)
+                            """, (s['id'], s['center_id'], s['amount'], s['settlement_date'],
+                                  s['description'] if 'description' in s.keys() else ''))
+                        st.success(f"✅ {len(settlements)} تسویه منتقل شد")
+                    except Exception as e:
+                        st.warning(f"⚠️ خطا در انتقال تسویه‌ها: {e}")
+                    
+                    progress_bar.progress(85)
+                    
+                    # انتقال تراکنش‌های نقدی
+                    status_text.text("🏦 انتقال تراکنش‌های نقدی...")
+                    try:
+                        cash_trans = old_cursor.execute("SELECT * FROM cash_transactions").fetchall()
+                        for ct in cash_trans:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO cash_transactions (id, transaction_type, amount, source, description, transaction_date)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                            """, (ct['id'], ct['transaction_type'], ct['amount'], ct['source'],
+                                  ct['description'] if 'description' in ct.keys() else '',
+                                  ct['transaction_date']))
+                        st.success(f"✅ {len(cash_trans)} تراکنش نقدی منتقل شد")
+                    except Exception as e:
+                        st.warning(f"⚠️ جدول تراکنش‌های نقدی وجود نداشت یا خطا: {e}")
+                    
+                    progress_bar.progress(95)
+                    
+                    # انتقال دسته‌بندی کمیسیون
+                    status_text.text("💳 انتقال دسته‌بندی‌های کمیسیون...")
+                    try:
+                        categories = old_cursor.execute("SELECT * FROM commission_categories").fetchall()
+                        for cat in categories:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO commission_categories (id, name, description)
+                                VALUES (?, ?, ?)
+                            """, (cat['id'], cat['name'], cat['description'] if 'description' in cat.keys() else ''))
+                        st.success(f"✅ {len(categories)} دسته‌بندی منتقل شد")
+                    except Exception as e:
+                        st.warning(f"⚠️ جدول دسته‌بندی وجود نداشت: {e}")
+                    
+                    # انتقال کمیسیون‌ها
+                    try:
+                        commissions = old_cursor.execute("SELECT * FROM commissions").fetchall()
+                        for comm in commissions:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO commissions (id, center_id, category_id, commission_percent)
+                                VALUES (?, ?, ?, ?)
+                            """, (comm['id'], comm['center_id'], comm['category_id'], comm['commission_percent']))
+                        st.success(f"✅ {len(commissions)} کمیسیون منتقل شد")
+                    except Exception as e:
+                        pass
+                    
+                    # انتقال ارتباط محصول و دسته‌بندی
+                    try:
+                        prod_cats = old_cursor.execute("SELECT * FROM product_categories").fetchall()
+                        for pc in prod_cats:
+                            new_cursor.execute("""
+                                INSERT OR REPLACE INTO product_categories (product_id, category_id)
+                                VALUES (?, ?)
+                            """, (pc['product_id'], pc['category_id']))
+                    except Exception as e:
+                        pass
+                    
+                    new_conn.commit()
+                    progress_bar.progress(100)
+                    
+                    # بستن اتصالات
+                    old_conn.close()
+                    new_conn.close()
+                    
+                    # حذف فایل موقت
+                    os.unlink(tmp_path)
+                    
+                    status_text.text("")
+                    st.balloons()
+                    st.success("🎉 انتقال داده‌ها با موفقیت انجام شد!")
+                    
+                except Exception as e:
+                    st.error(f"❌ خطا در انتقال: {e}")
+    
+    with tab2:
+        st.markdown("#### 📊 آمار دیتابیس")
+        
+        conn = get_connection()
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            products_count = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+            st.metric("📦 تعداد کالاها", products_count)
+            
+            inflows_count = conn.execute("SELECT COUNT(*) FROM inflows").fetchone()[0]
+            st.metric("📥 تعداد ورودی‌ها", inflows_count)
+        
+        with col2:
+            outflows_count = conn.execute("SELECT COUNT(*) FROM outflows").fetchone()[0]
+            st.metric("📤 تعداد خروجی‌ها", outflows_count)
+            
+            centers_count = conn.execute("SELECT COUNT(*) FROM sales_centers").fetchone()[0]
+            st.metric("🏪 تعداد مراکز فروش", centers_count)
+        
+        with col3:
+            settlements_count = conn.execute("SELECT COUNT(*) FROM settlements").fetchone()[0]
+            st.metric("💵 تعداد تسویه‌ها", settlements_count)
+            
+            cash_count = conn.execute("SELECT COUNT(*) FROM cash_transactions").fetchone()[0]
+            st.metric("🏦 تعداد تراکنش‌های نقدی", cash_count)
+        
+        conn.close()
+    
+    with tab3:
+        st.markdown("#### 🗑️ پاک‌سازی داده‌ها")
+        st.error("⚠️ این عملیات قابل بازگشت نیست!")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🗑️ پاک کردن همه خروجی‌ها", use_container_width=True):
+                conn = get_connection()
+                conn.execute("DELETE FROM outflows")
+                conn.commit()
+                conn.close()
+                st.success("خروجی‌ها پاک شدند!")
+                st.rerun()
+        
+        with col2:
+            if st.button("🗑️ پاک کردن همه ورودی‌ها", use_container_width=True):
+                conn = get_connection()
+                conn.execute("DELETE FROM inflows")
+                conn.commit()
+                conn.close()
+                st.success("ورودی‌ها پاک شدند!")
+                st.rerun()
+        
+        st.markdown("---")
+        
+        confirm_text = st.text_input("برای پاک کردن کل داده‌ها، عبارت 'DELETE ALL' را تایپ کنید:")
+        
+        if st.button("☢️ پاک کردن کل داده‌ها", type="primary", use_container_width=True):
+            if confirm_text == "DELETE ALL":
+                conn = get_connection()
+                conn.execute("DELETE FROM outflows")
+                conn.execute("DELETE FROM inflows")
+                conn.execute("DELETE FROM products")
+                conn.execute("DELETE FROM settlements")
+                conn.execute("DELETE FROM cash_transactions")
+                conn.commit()
+                conn.close()
+                st.success("همه داده‌ها پاک شدند!")
+                st.rerun()
+            else:
+                st.warning("عبارت تایید اشتباه است!")
+
 # ==================== منوی اصلی ====================
 def main_menu():
     """منوی اصلی سایدبار"""
@@ -1333,6 +1623,8 @@ def main_menu():
             menu_items.append("📊 گزارشات")
         if permissions.get('users'):
             menu_items.append("👥 مدیریت کاربران")
+        if permissions.get('data_management'):
+            menu_items.append("💾 مدیریت داده")
         
         selected = st.radio("منو", menu_items, label_visibility="collapsed")
         
@@ -1380,6 +1672,8 @@ def main():
             reports_page()
         elif "مدیریت کاربران" in selected_page:
             users_page()
+        elif "مدیریت داده" in selected_page:
+            data_management_page()
 
 if __name__ == "__main__":
     main()
