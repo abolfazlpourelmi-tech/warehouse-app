@@ -25,89 +25,433 @@ st.set_page_config(
 # ==================== استایل‌های CSS ====================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;900&display=swap');
     
+    /* فونت کلی */
     * {
         font-family: 'Vazirmatn', 'Tahoma', sans-serif !important;
     }
     
-    .main-header {
-        text-align: center;
-        color: #1976D2;
-        padding: 1rem;
-        border-bottom: 3px solid #1976D2;
-        margin-bottom: 2rem;
+    /* پس‌زمینه اصلی */
+    .stApp {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
     }
     
-    .metric-card {
+    /* سایدبار */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1a237e 0%, #283593 50%, #3949ab 100%);
+        direction: rtl;
+    }
+    
+    section[data-testid="stSidebar"] .stMarkdown {
+        color: white !important;
+    }
+    
+    section[data-testid="stSidebar"] label {
+        color: rgba(255,255,255,0.9) !important;
+    }
+    
+    section[data-testid="stSidebar"] .stRadio > label {
+        color: white !important;
+        font-weight: 500;
+    }
+    
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+        color: white !important;
+    }
+    
+    section[data-testid="stSidebar"] hr {
+        border-color: rgba(255,255,255,0.2);
+    }
+    
+    /* دکمه‌های سایدبار */
+    section[data-testid="stSidebar"] .stButton > button {
+        background: linear-gradient(135deg, #ff5252 0%, #f44336 100%);
+        color: white;
+        border: none;
+        border-radius: 25px;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
+    }
+    
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(244, 67, 54, 0.4);
+    }
+    
+    /* عنوان‌های اصلی */
+    h1, h2, h3 {
+        background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 700;
+    }
+    
+    /* کارت‌های متریک */
+    [data-testid="metric-container"] {
         background: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        text-align: center;
-        border-right: 5px solid;
+        border-radius: 16px;
+        padding: 1rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
     }
     
-    .metric-title {
+    [data-testid="metric-container"]:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        color: #666 !important;
+    }
+    
+    [data-testid="stMetricValue"] {
+        font-size: 1.5rem !important;
+        font-weight: 700 !important;
+        background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    /* دکمه‌های اصلی */
+    .stButton > button {
+        border-radius: 12px;
+        padding: 0.6rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        border: none;
+    }
+    
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+        color: white;
+        box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+    }
+    
+    .stButton > button[kind="secondary"] {
+        background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+        color: #333;
+    }
+    
+    /* فیلدهای ورودی */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div {
+        border-radius: 10px !important;
+        border: 2px solid #e0e0e0 !important;
+        padding: 0.5rem 1rem !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus {
+        border-color: #2196F3 !important;
+        box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1) !important;
+    }
+    
+    /* جداول */
+    .stDataFrame {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    
+    .stDataFrame thead tr th {
+        background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        padding: 1rem !important;
+    }
+    
+    .stDataFrame tbody tr:hover {
+        background-color: #f5f5f5 !important;
+    }
+    
+    /* تب‌ها */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background: white;
+        border-radius: 12px;
+        padding: 0.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 8px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%) !important;
+        color: white !important;
+    }
+    
+    /* فرم‌ها */
+    [data-testid="stForm"] {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+    
+    /* باکس‌های اطلاع‌رسانی */
+    .stAlert {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="stAlertContentSuccess"]) {
+        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+        border-right: 4px solid #4CAF50;
+    }
+    
+    [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="stAlertContentWarning"]) {
+        background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+        border-right: 4px solid #FF9800;
+    }
+    
+    [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="stAlertContentError"]) {
+        background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+        border-right: 4px solid #f44336;
+    }
+    
+    [data-testid="stAlert"][data-baseweb="notification"]:has([data-testid="stAlertContentInfo"]) {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border-right: 4px solid #2196F3;
+    }
+    
+    /* گروپ‌باکس‌ها */
+    .stExpander {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid rgba(0,0,0,0.05);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    /* پراگرس بار */
+    .stProgress > div > div {
+        background: linear-gradient(135deg, #4CAF50 0%, #8BC34A 100%);
+        border-radius: 10px;
+    }
+    
+    /* آپلودر فایل */
+    [data-testid="stFileUploader"] {
+        background: white;
+        border-radius: 12px;
+        border: 2px dashed #e0e0e0;
+        padding: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    [data-testid="stFileUploader"]:hover {
+        border-color: #2196F3;
+        background: #f5f5f5;
+    }
+    
+    /* کارت‌های سفارشی */
+    .custom-card {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border: 1px solid rgba(0,0,0,0.05);
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .custom-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    }
+    
+    /* کارت‌های رنگی */
+    .green-card {
+        background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+        color: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(76, 175, 80, 0.3);
+    }
+    
+    .red-card {
+        background: linear-gradient(135deg, #f44336 0%, #ef5350 100%);
+        color: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(244, 67, 54, 0.3);
+    }
+    
+    .blue-card {
+        background: linear-gradient(135deg, #2196F3 0%, #42A5F5 100%);
+        color: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(33, 150, 243, 0.3);
+    }
+    
+    .purple-card {
+        background: linear-gradient(135deg, #9C27B0 0%, #AB47BC 100%);
+        color: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(156, 39, 176, 0.3);
+    }
+    
+    .orange-card {
+        background: linear-gradient(135deg, #FF9800 0%, #FFB74D 100%);
+        color: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(255, 152, 0, 0.3);
+    }
+    
+    .teal-card {
+        background: linear-gradient(135deg, #009688 0%, #26A69A 100%);
+        color: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 150, 136, 0.3);
+    }
+    
+    /* عنوان کارت */
+    .card-title {
         font-size: 0.9rem;
-        color: #666;
+        opacity: 0.9;
         margin-bottom: 0.5rem;
     }
     
-    .metric-value {
-        font-size: 1.5rem;
-        font-weight: bold;
+    .card-value {
+        font-size: 1.8rem;
+        font-weight: 700;
     }
     
-    .stButton > button {
-        width: 100%;
+    /* انیمیشن ورود */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
     
-    .success-box {
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        padding: 1rem;
-        border-radius: 5px;
-        color: #155724;
+    .stMetric, .custom-card, [data-testid="stForm"] {
+        animation: fadeInUp 0.5s ease-out;
     }
     
-    .error-box {
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-        padding: 1rem;
-        border-radius: 5px;
-        color: #721c24;
+    /* اسکرول‌بار زیبا */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
     }
     
-    .rtl {
-        direction: rtl;
-        text-align: right;
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
     }
     
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #1565C0 0%, #1976D2 100%);
+    }
+    
+    /* صفحه لاگین */
+    .login-container {
+        max-width: 400px;
+        margin: 0 auto;
+        padding: 2rem;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+    
+    .login-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .login-logo {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* نشانگر وضعیت */
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    
+    .status-success {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+    
+    .status-warning {
+        background: #fff3e0;
+        color: #ef6c00;
+    }
+    
+    .status-danger {
+        background: #ffebee;
+        color: #c62828;
+    }
+    
+    /* RTL برای سایدبار */
     div[data-testid="stSidebar"] {
         direction: rtl;
     }
     
-    .cash-flow-card {
-        padding: 1rem;
+    /* رادیو باتن‌های سایدبار */
+    section[data-testid="stSidebar"] .stRadio > div {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    section[data-testid="stSidebar"] .stRadio > div > label {
+        background: rgba(255,255,255,0.1);
+        padding: 0.75rem 1rem;
         border-radius: 10px;
-        text-align: center;
-        margin: 0.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
     }
     
-    .deposit-card {
-        background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-        color: white;
+    section[data-testid="stSidebar"] .stRadio > div > label:hover {
+        background: rgba(255,255,255,0.2);
     }
     
-    .withdraw-card {
-        background: linear-gradient(135deg, #f44336 0%, #e53935 100%);
-        color: white;
-    }
-    
-    .balance-card {
-        background: linear-gradient(135deg, #2196F3 0%, #1976D2 100%);
-        color: white;
+    section[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"] {
+        background: rgba(255,255,255,0.25);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -390,16 +734,34 @@ def get_user_permissions(role):
 # ==================== صفحه لاگین ====================
 def login_page():
     """صفحه ورود"""
-    st.markdown("<h1 style='text-align: center;'>📦 سیستم مدیریت انبار</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #666;'>ورود به سیستم</h3>", unsafe_allow_html=True)
     
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # هدر با لوگو
+    st.markdown("""
+    <div style='text-align: center; padding: 2rem 0;'>
+        <div style='font-size: 5rem; margin-bottom: 1rem;'>📦</div>
+        <h1 style='background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%); 
+                   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                   font-size: 2.5rem; margin-bottom: 0.5rem;'>سیستم مدیریت انبار</h1>
+        <p style='color: #666; font-size: 1.1rem;'>نسخه آنلاین - نایتو</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 1.5, 1])
     
     with col2:
+        st.markdown("""
+        <div style='background: white; padding: 2rem; border-radius: 20px; 
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.1);'>
+        """, unsafe_allow_html=True)
+        
         with st.form("login_form"):
-            username = st.text_input("نام کاربری", placeholder="نام کاربری خود را وارد کنید")
-            password = st.text_input("رمز عبور", type="password", placeholder="رمز عبور")
-            submit = st.form_submit_button("🔐 ورود", use_container_width=True)
+            st.markdown("<h3 style='text-align: center; margin-bottom: 1.5rem;'>🔐 ورود به سیستم</h3>", unsafe_allow_html=True)
+            
+            username = st.text_input("👤 نام کاربری", placeholder="نام کاربری خود را وارد کنید")
+            password = st.text_input("🔑 رمز عبور", type="password", placeholder="رمز عبور")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            submit = st.form_submit_button("🚀 ورود به سیستم", use_container_width=True, type="primary")
             
             if submit:
                 if username and password:
@@ -408,24 +770,35 @@ def login_page():
                         st.session_state.logged_in = True
                         st.session_state.user = user
                         st.session_state.permissions = get_user_permissions(user['role'])
-                        st.success("ورود موفقیت‌آمیز!")
+                        st.success("✅ ورود موفقیت‌آمیز! در حال انتقال...")
+                        st.balloons()
                         st.rerun()
                     else:
-                        st.error("نام کاربری یا رمز عبور اشتباه است!")
+                        st.error("❌ نام کاربری یا رمز عبور اشتباه است!")
                 else:
-                    st.warning("لطفاً نام کاربری و رمز عبور را وارد کنید.")
+                    st.warning("⚠️ لطفاً نام کاربری و رمز عبور را وارد کنید.")
         
-        st.markdown("---")
+        st.markdown("</div>", unsafe_allow_html=True)
+        
         st.markdown("""
-        <div style='text-align: center; color: #888;'>
-            <small>نسخه ۱.۰ | طراحی شده برای نایتو</small>
+        <div style='text-align: center; margin-top: 2rem; color: #888;'>
+            <p>💡 اطلاعات ورود پیش‌فرض:</p>
+            <code style='background: #f5f5f5; padding: 0.5rem 1rem; border-radius: 5px;'>
+                admin / admin123
+            </code>
         </div>
         """, unsafe_allow_html=True)
 
 # ==================== داشبورد ====================
 def dashboard_page():
     """صفحه داشبورد"""
-    st.markdown("<h2 style='text-align: center; color: #1976D2;'>📊 داشبورد مدیریتی</h2>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style='text-align: center; padding: 1rem 0 2rem 0;'>
+        <h2 style='background: linear-gradient(135deg, #1976D2 0%, #2196F3 100%); 
+                   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                   font-size: 2rem;'>📊 داشبورد مدیریتی</h2>
+    </div>
+    """, unsafe_allow_html=True)
     
     conn = get_connection()
     
@@ -460,32 +833,87 @@ def dashboard_page():
         FROM outflows WHERE is_paid = 1 AND is_returned = 0
     """).fetchone()['total'] or 0
     
-    # کارت‌های آماری
+    # کارت‌های آماری - ردیف اول
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("💰 درآمد کل فروش", f"{int(revenue):,} تومان")
-    with col2:
-        st.metric("📦 بهای تمام شده", f"{int(cogs):,} تومان")
-    with col3:
-        st.metric("💳 کمیسیون پرداختی", f"{int(commission):,} تومان")
-    with col4:
-        st.metric("🚚 هزینه ارسال", f"{int(shipping):,} تومان")
+        st.markdown(f"""
+        <div class='green-card'>
+            <div class='card-title'>💰 درآمد کل فروش</div>
+            <div class='card-value'>{int(revenue):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
     
+    with col2:
+        st.markdown(f"""
+        <div class='orange-card'>
+            <div class='card-title'>📦 بهای تمام شده</div>
+            <div class='card-value'>{int(cogs):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class='purple-card'>
+            <div class='card-title'>💳 کمیسیون پرداختی</div>
+            <div class='card-value'>{int(commission):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"""
+        <div class='red-card'>
+            <div class='card-title'>🚚 هزینه ارسال</div>
+            <div class='card-value'>{int(shipping):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # ردیف دوم
     col5, col6, col7 = st.columns(3)
     
+    profit_color = 'green-card' if net_profit >= 0 else 'red-card'
     with col5:
-        delta_color = "normal" if net_profit >= 0 else "inverse"
-        st.metric("📈 سود خالص", f"{int(net_profit):,} تومان", delta=None)
-    with col6:
-        st.metric("🏪 موجودی کل انبار", f"{int(total_stock):,} واحد")
-    with col7:
-        st.metric("✅ مجموع تسویه شده", f"{int(settlements_total):,} تومان")
+        st.markdown(f"""
+        <div class='{profit_color}'>
+            <div class='card-title'>📈 سود خالص</div>
+            <div class='card-value'>{int(net_profit):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    st.markdown("---")
+    with col6:
+        st.markdown(f"""
+        <div class='blue-card'>
+            <div class='card-title'>🏪 موجودی کل انبار</div>
+            <div class='card-value'>{int(total_stock):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>واحد</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col7:
+        st.markdown(f"""
+        <div class='teal-card'>
+            <div class='card-title'>✅ مجموع تسویه شده</div>
+            <div class='card-value'>{int(settlements_total):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     
     # بخش موجودی حساب
-    st.markdown("### 🏦 موجودی حساب")
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #1a237e 0%, #283593 100%); 
+                padding: 1rem 1.5rem; border-radius: 12px; margin-bottom: 1rem;'>
+        <h3 style='color: white; margin: 0;'>🏦 موجودی حساب</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
     deposits = conn.execute(
         "SELECT COALESCE(SUM(amount), 0) as total FROM cash_transactions WHERE transaction_type = 'deposit'"
@@ -500,15 +928,43 @@ def dashboard_page():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("💵 مجموع واریزها", f"{int(deposits):,} تومان")
-    with col2:
-        st.metric("💸 مجموع برداشت‌ها", f"{int(withdraws):,} تومان")
-    with col3:
-        st.metric("💰 موجودی نقدی", f"{int(cash_balance):,} تومان")
-    with col4:
-        st.metric("💎 ارزش کل دارایی", f"{int(inventory_value):,} تومان")
+        st.markdown(f"""
+        <div class='green-card'>
+            <div class='card-title'>💵 مجموع واریزها</div>
+            <div class='card-value'>{int(deposits):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    st.markdown("---")
+    with col2:
+        st.markdown(f"""
+        <div class='red-card'>
+            <div class='card-title'>💸 مجموع برداشت‌ها</div>
+            <div class='card-value'>{int(withdraws):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    balance_color = 'green-card' if cash_balance >= 0 else 'red-card'
+    with col3:
+        st.markdown(f"""
+        <div class='{balance_color}'>
+            <div class='card-title'>💰 موجودی نقدی</div>
+            <div class='card-value'>{int(cash_balance):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"""
+        <div class='teal-card'>
+            <div class='card-title'>💎 ارزش کل دارایی</div>
+            <div class='card-value'>{int(inventory_value):,}</div>
+            <div style='font-size: 0.8rem; opacity: 0.8;'>تومان</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     
     # جدول بدهی مراکز
     st.markdown("### 📋 بدهی مراکز فروش")
@@ -660,18 +1116,42 @@ def inflows_page():
     tab1, tab2 = st.tabs(["➕ ثبت ورودی", "📋 تاریخچه"])
     
     with tab1:
-        products = conn.execute("SELECT id, name, color FROM products ORDER BY name").fetchall()
+        products = conn.execute("SELECT id, name, color, barcode FROM products ORDER BY name").fetchall()
         
         if not products:
             st.warning("ابتدا کالا اضافه کنید!")
         else:
+            # بارکدخوان
+            st.markdown("#### 🔍 اسکن بارکد")
+            barcode_input = st.text_input("بارکد را اسکن کنید یا وارد کنید:", key="inflow_barcode", 
+                                          placeholder="بارکد را اسکن کنید...")
+            
+            # پیدا کردن محصول با بارکد
+            selected_product_index = 0
+            if barcode_input:
+                found_product = conn.execute(
+                    "SELECT id, name, color FROM products WHERE barcode = ?", (barcode_input,)
+                ).fetchone()
+                
+                if found_product:
+                    st.success(f"✅ کالا پیدا شد: [{found_product['id']}] {found_product['name']} - {found_product['color'] or 'بدون رنگ'}")
+                    # پیدا کردن ایندکس محصول
+                    for i, p in enumerate(products):
+                        if p['id'] == found_product['id']:
+                            selected_product_index = i
+                            break
+                else:
+                    st.warning("⚠️ کالایی با این بارکد یافت نشد!")
+            
+            st.markdown("---")
+            
             with st.form("inflow_form"):
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    product_options = {f"[{p['id']}] {p['name']} - {p['color'] or 'بدون رنگ'}": p['id'] for p in products}
-                    selected_product = st.selectbox("کالا *", options=list(product_options.keys()))
-                    product_id = product_options[selected_product]
+                    product_options = [f"[{p['id']}] {p['name']} - {p['color'] or 'بدون رنگ'}" for p in products]
+                    selected_product = st.selectbox("کالا *", options=product_options, index=selected_product_index)
+                    product_id = products[product_options.index(selected_product)]['id']
                     
                     quantity = st.number_input("تعداد *", min_value=0.01, step=1.0)
                 
@@ -738,7 +1218,7 @@ def outflows_page():
     tab1, tab2 = st.tabs(["➕ ثبت خروجی", "📋 تاریخچه"])
     
     with tab1:
-        products = conn.execute("SELECT id, name, color, stock FROM products WHERE stock > 0 ORDER BY name").fetchall()
+        products = conn.execute("SELECT id, name, color, stock, barcode FROM products WHERE stock > 0 ORDER BY name").fetchall()
         centers = conn.execute("SELECT id, name, commission_percent FROM sales_centers").fetchall()
         
         if not products:
@@ -746,13 +1226,37 @@ def outflows_page():
         elif not centers:
             st.warning("ابتدا مرکز فروش اضافه کنید!")
         else:
+            # بارکدخوان
+            st.markdown("#### 🔍 اسکن بارکد")
+            barcode_input = st.text_input("بارکد را اسکن کنید یا وارد کنید:", key="outflow_barcode",
+                                          placeholder="بارکد را اسکن کنید...")
+            
+            # پیدا کردن محصول با بارکد
+            selected_product_index = 0
+            if barcode_input:
+                found_product = conn.execute(
+                    "SELECT id, name, color, stock FROM products WHERE barcode = ? AND stock > 0", (barcode_input,)
+                ).fetchone()
+                
+                if found_product:
+                    st.success(f"✅ کالا پیدا شد: [{found_product['id']}] {found_product['name']} - {found_product['color'] or 'بدون رنگ'} (موجودی: {found_product['stock']})")
+                    # پیدا کردن ایندکس محصول
+                    for i, p in enumerate(products):
+                        if p['id'] == found_product['id']:
+                            selected_product_index = i
+                            break
+                else:
+                    st.warning("⚠️ کالایی با این بارکد یافت نشد یا موجودی ندارد!")
+            
+            st.markdown("---")
+            
             with st.form("outflow_form"):
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    product_options = {f"[{p['id']}] {p['name']} - {p['color'] or 'بدون رنگ'} (موجودی: {p['stock']})": p['id'] for p in products}
-                    selected_product = st.selectbox("کالا *", options=list(product_options.keys()))
-                    product_id = product_options[selected_product]
+                    product_options = [f"[{p['id']}] {p['name']} - {p['color'] or 'بدون رنگ'} (موجودی: {p['stock']})" for p in products]
+                    selected_product = st.selectbox("کالا *", options=product_options, index=selected_product_index)
+                    product_id = products[product_options.index(selected_product)]['id']
                     
                     selected_product_data = next(p for p in products if p['id'] == product_id)
                     
@@ -1305,9 +1809,184 @@ def data_management_page():
     """صفحه مدیریت داده و انتقال دیتابیس"""
     st.markdown("### 💾 مدیریت داده")
     
-    tab1, tab2, tab3 = st.tabs(["📤 انتقال از دیتابیس قدیم", "📊 آمار دیتابیس", "🗑️ پاک‌سازی"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📥 خروجی گرفتن", "📤 انتقال از دیتابیس قدیم", "📊 آمار دیتابیس", "🗑️ پاک‌سازی"])
     
     with tab1:
+        st.markdown("#### 📥 خروجی گرفتن از دیتابیس")
+        
+        conn = get_connection()
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("##### 💾 دانلود فایل دیتابیس")
+            st.info("فایل کامل دیتابیس SQLite را دانلود کنید.")
+            
+            # خواندن فایل دیتابیس
+            try:
+                with open("warehouse_web.db", "rb") as f:
+                    db_bytes = f.read()
+                
+                st.download_button(
+                    label="⬇️ دانلود دیتابیس (SQLite)",
+                    data=db_bytes,
+                    file_name="warehouse_backup.db",
+                    mime="application/octet-stream",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"خطا در خواندن دیتابیس: {e}")
+        
+        with col2:
+            st.markdown("##### 📊 دانلود گزارش اکسل")
+            st.info("تمام داده‌ها را در یک فایل اکسل دریافت کنید.")
+            
+            if st.button("📊 ایجاد فایل اکسل", use_container_width=True, type="primary"):
+                try:
+                    import io
+                    
+                    # ایجاد فایل اکسل
+                    output = io.BytesIO()
+                    
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        # محصولات
+                        products_df = pd.read_sql_query("SELECT * FROM products", conn)
+                        products_df.to_excel(writer, sheet_name='محصولات', index=False)
+                        
+                        # ورودی‌ها
+                        inflows_df = pd.read_sql_query("""
+                            SELECT i.*, p.name as product_name 
+                            FROM inflows i 
+                            LEFT JOIN products p ON i.product_id = p.id
+                        """, conn)
+                        inflows_df.to_excel(writer, sheet_name='ورودی‌ها', index=False)
+                        
+                        # خروجی‌ها
+                        outflows_df = pd.read_sql_query("""
+                            SELECT o.*, p.name as product_name, s.name as center_name
+                            FROM outflows o 
+                            LEFT JOIN products p ON o.product_id = p.id
+                            LEFT JOIN sales_centers s ON o.center_id = s.id
+                        """, conn)
+                        outflows_df.to_excel(writer, sheet_name='خروجی‌ها', index=False)
+                        
+                        # مراکز فروش
+                        centers_df = pd.read_sql_query("SELECT * FROM sales_centers", conn)
+                        centers_df.to_excel(writer, sheet_name='مراکز فروش', index=False)
+                        
+                        # تسویه‌ها
+                        settlements_df = pd.read_sql_query("""
+                            SELECT s.*, c.name as center_name
+                            FROM settlements s
+                            LEFT JOIN sales_centers c ON s.center_id = c.id
+                        """, conn)
+                        settlements_df.to_excel(writer, sheet_name='تسویه‌ها', index=False)
+                        
+                        # تراکنش‌های نقدی
+                        cash_df = pd.read_sql_query("SELECT * FROM cash_transactions", conn)
+                        cash_df.to_excel(writer, sheet_name='تراکنش‌های نقدی', index=False)
+                    
+                    output.seek(0)
+                    
+                    st.download_button(
+                        label="⬇️ دانلود فایل اکسل",
+                        data=output.getvalue(),
+                        file_name="warehouse_report.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                    
+                    st.success("✅ فایل اکسل آماده دانلود است!")
+                    
+                except Exception as e:
+                    st.error(f"خطا در ایجاد فایل اکسل: {e}")
+        
+        st.markdown("---")
+        
+        # خروجی جداگانه برای هر جدول
+        st.markdown("##### 📋 خروجی جداگانه جداول")
+        
+        export_table = st.selectbox("جدول مورد نظر را انتخاب کنید:", [
+            "محصولات (Products)",
+            "ورودی‌ها (Inflows)",
+            "خروجی‌ها (Outflows)",
+            "مراکز فروش (Sales Centers)",
+            "تسویه‌ها (Settlements)",
+            "تراکنش‌های نقدی (Cash Transactions)"
+        ])
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            export_format = st.radio("فرمت خروجی:", ["Excel (.xlsx)", "CSV (.csv)"], horizontal=True)
+        
+        if st.button("📥 دانلود جدول", use_container_width=True):
+            try:
+                # انتخاب کوئری براساس جدول
+                if "محصولات" in export_table:
+                    df = pd.read_sql_query("SELECT * FROM products", conn)
+                    filename = "products"
+                elif "ورودی‌ها" in export_table:
+                    df = pd.read_sql_query("""
+                        SELECT i.id, p.name as product_name, p.color, i.quantity, i.remaining_quantity,
+                               i.buy_price, i.dollar_rate, i.inflow_date
+                        FROM inflows i 
+                        LEFT JOIN products p ON i.product_id = p.id
+                    """, conn)
+                    filename = "inflows"
+                elif "خروجی‌ها" in export_table:
+                    df = pd.read_sql_query("""
+                        SELECT o.id, p.name as product_name, s.name as center_name, o.quantity,
+                               o.sell_price, o.cogs_unit, o.commission_amount, o.shipping_cost,
+                               o.outflow_date, o.order_number, o.is_returned, o.is_paid
+                        FROM outflows o 
+                        LEFT JOIN products p ON o.product_id = p.id
+                        LEFT JOIN sales_centers s ON o.center_id = s.id
+                    """, conn)
+                    filename = "outflows"
+                elif "مراکز فروش" in export_table:
+                    df = pd.read_sql_query("SELECT * FROM sales_centers", conn)
+                    filename = "sales_centers"
+                elif "تسویه‌ها" in export_table:
+                    df = pd.read_sql_query("""
+                        SELECT s.id, c.name as center_name, s.amount, s.settlement_date, s.description
+                        FROM settlements s
+                        LEFT JOIN sales_centers c ON s.center_id = c.id
+                    """, conn)
+                    filename = "settlements"
+                else:
+                    df = pd.read_sql_query("SELECT * FROM cash_transactions", conn)
+                    filename = "cash_transactions"
+                
+                if "Excel" in export_format:
+                    import io
+                    output = io.BytesIO()
+                    df.to_excel(output, index=False)
+                    output.seek(0)
+                    
+                    st.download_button(
+                        label=f"⬇️ دانلود {filename}.xlsx",
+                        data=output.getvalue(),
+                        file_name=f"{filename}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                else:
+                    csv_data = df.to_csv(index=False).encode('utf-8-sig')
+                    st.download_button(
+                        label=f"⬇️ دانلود {filename}.csv",
+                        data=csv_data,
+                        file_name=f"{filename}.csv",
+                        mime="text/csv"
+                    )
+                
+                st.success(f"✅ {len(df)} رکورد آماده دانلود!")
+                
+            except Exception as e:
+                st.error(f"خطا: {e}")
+        
+        conn.close()
+    
+    with tab2:
         st.markdown("#### 📤 انتقال داده از نسخه دسکتاپ")
         st.info("""
         فایل `warehouse_v2.db` را از کامپیوتر خود آپلود کنید.
@@ -1516,7 +2195,7 @@ def data_management_page():
                 except Exception as e:
                     st.error(f"❌ خطا در انتقال: {e}")
     
-    with tab2:
+    with tab3:
         st.markdown("#### 📊 آمار دیتابیس")
         
         conn = get_connection()
@@ -1546,7 +2225,7 @@ def data_management_page():
         
         conn.close()
     
-    with tab3:
+    with tab4:
         st.markdown("#### 🗑️ پاک‌سازی داده‌ها")
         st.error("⚠️ این عملیات قابل بازگشت نیست!")
         
@@ -1593,13 +2272,29 @@ def data_management_page():
 def main_menu():
     """منوی اصلی سایدبار"""
     with st.sidebar:
-        st.markdown(f"### 👋 خوش آمدید")
-        st.markdown(f"**{st.session_state.user['full_name'] or st.session_state.user['username']}**")
-        
-        role_names = {"admin": "👑 مدیر", "warehouse": "📦 انباردار", "viewer": "👀 ناظر"}
-        st.markdown(f"نقش: {role_names.get(st.session_state.user['role'], '')}")
+        # هدر سایدبار
+        st.markdown("""
+        <div style='text-align: center; padding: 1rem 0;'>
+            <div style='font-size: 3rem;'>📦</div>
+            <h3 style='color: white; margin: 0.5rem 0;'>مدیریت انبار</h3>
+        </div>
+        """, unsafe_allow_html=True)
         
         st.markdown("---")
+        
+        # اطلاعات کاربر
+        user_name = st.session_state.user['full_name'] or st.session_state.user['username']
+        role_names = {"admin": "👑 مدیر", "warehouse": "📦 انباردار", "viewer": "👀 ناظر"}
+        role_display = role_names.get(st.session_state.user['role'], '')
+        
+        st.markdown(f"""
+        <div style='background: rgba(255,255,255,0.1); padding: 1rem; border-radius: 10px; text-align: center;'>
+            <div style='font-size: 1.2rem; font-weight: bold; color: white;'>👋 {user_name}</div>
+            <div style='color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-top: 0.25rem;'>{role_display}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<br>", unsafe_allow_html=True)
         
         permissions = st.session_state.permissions
         
@@ -1628,13 +2323,22 @@ def main_menu():
         
         selected = st.radio("منو", menu_items, label_visibility="collapsed")
         
+        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("---")
         
-        if st.button("🚪 خروج", use_container_width=True):
+        if st.button("🚪 خروج از سیستم", use_container_width=True):
             st.session_state.logged_in = False
             st.session_state.user = None
             st.session_state.permissions = None
             st.rerun()
+        
+        # فوتر
+        st.markdown("""
+        <div style='text-align: center; margin-top: 2rem; color: rgba(255,255,255,0.5); font-size: 0.8rem;'>
+            <p>نسخه ۱.۰</p>
+            <p>🚀 Nyto Warehouse</p>
+        </div>
+        """, unsafe_allow_html=True)
         
         return selected
 
