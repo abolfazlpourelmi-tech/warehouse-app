@@ -271,6 +271,45 @@ class DBManager:
             except:
                 pass
         
+        # ===== Migration برای دیتابیس‌های قدیمی =====
+        # اضافه کردن ستون remaining به inflows
+        try:
+            self.cursor.execute("ALTER TABLE inflows ADD COLUMN remaining REAL DEFAULT 0")
+            # مقداردهی اولیه remaining برابر با quantity
+            self.cursor.execute("UPDATE inflows SET remaining = quantity WHERE remaining = 0 OR remaining IS NULL")
+        except:
+            pass
+        
+        # اضافه کردن ستون dollar_rate به inflows
+        try:
+            self.cursor.execute("ALTER TABLE inflows ADD COLUMN dollar_rate REAL DEFAULT 0")
+        except:
+            pass
+        
+        # اضافه کردن ستون barcode به products
+        try:
+            self.cursor.execute("ALTER TABLE products ADD COLUMN barcode TEXT DEFAULT ''")
+        except:
+            pass
+        
+        # اضافه کردن ستون order_number به outflows
+        try:
+            self.cursor.execute("ALTER TABLE outflows ADD COLUMN order_number TEXT DEFAULT ''")
+        except:
+            pass
+        
+        # اضافه کردن ستون is_returned به outflows
+        try:
+            self.cursor.execute("ALTER TABLE outflows ADD COLUMN is_returned INTEGER DEFAULT 0")
+        except:
+            pass
+        
+        # اضافه کردن ستون is_paid به outflows
+        try:
+            self.cursor.execute("ALTER TABLE outflows ADD COLUMN is_paid INTEGER DEFAULT 0")
+        except:
+            pass
+        
         self.conn.commit()
     
     def execute_query(self, query, params=()):
