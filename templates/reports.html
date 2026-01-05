@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% block title %}گزارشات{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-graph-up"></i> گزارشات</h2>
+
+<!-- گزارش سود و زیان -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-cash-coin"></i> گزارش سود و زیان
+    </div>
+    <div class="card-body">
+        <div class="row g-4">
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="text-muted mb-1">فروش</div>
+                    <h4 class="text-primary">{{ format_number(stats.revenue) }}</h4>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="text-muted mb-1">بهای تمام شده</div>
+                    <h4 class="text-warning">{{ format_number(stats.cogs) }}</h4>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="text-muted mb-1">سود ناخالص</div>
+                    <h4 class="text-info">{{ format_number(stats.revenue - stats.cogs) }}</h4>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="text-muted mb-1">کمیسیون</div>
+                    <h4 class="text-danger">{{ format_number(stats.commission) }}</h4>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="text-muted mb-1">ارسال</div>
+                    <h4 class="text-secondary">{{ format_number(stats.shipping) }}</h4>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="text-muted mb-1">سود خالص</div>
+                    <h4 class="{{ 'text-success' if stats.profit >= 0 else 'text-danger' }}">
+                        {{ format_number(stats.profit) }}
+                    </h4>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- گزارش موجودی -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-boxes"></i> گزارش موجودی
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-hover">
+                        <thead class="sticky-top bg-white">
+                            <tr>
+                                <th>کد</th>
+                                <th>نام</th>
+                                <th>رنگ</th>
+                                <th>موجودی</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for product in products %}
+                            <tr>
+                                <td>{{ product.id }}</td>
+                                <td>{{ product.name }}</td>
+                                <td>{{ product.color or '-' }}</td>
+                                <td>
+                                    <span class="badge {{ 'bg-success' if product.stock > 0 else 'bg-danger' }}">
+                                        {{ product.stock }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3 p-3 bg-light rounded">
+                    <strong>ارزش کل موجودی:</strong>
+                    <span class="text-primary fs-5">{{ format_number(stats.inventory_value) }} تومان</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- عملکرد مراکز -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-shop"></i> عملکرد مراکز فروش
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>مرکز</th>
+                                <th>تعداد سفارش</th>
+                                <th>تعداد کالا</th>
+                                <th>فروش</th>
+                                <th>سود</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for center in center_stats %}
+                            <tr>
+                                <td><strong>{{ center.name }}</strong></td>
+                                <td>{{ center.count }}</td>
+                                <td>{{ center.qty }}</td>
+                                <td>{{ format_number(center.sales) }}</td>
+                                <td class="{{ 'text-success' if center.profit >= 0 else 'text-danger' }}">
+                                    {{ format_number(center.profit) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- خلاصه کلی -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-info-circle"></i> خلاصه کلی
+    </div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-3">
+                <div class="p-3 border rounded">
+                    <div class="text-muted">موجودی انبار</div>
+                    <h3>{{ format_number(stats.total_stock) }} <small class="text-muted">واحد</small></h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 border rounded">
+                    <div class="text-muted">ارزش موجودی</div>
+                    <h3>{{ format_number(stats.inventory_value) }} <small class="text-muted">تومان</small></h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 border rounded">
+                    <div class="text-muted">تسویه شده</div>
+                    <h3 class="text-success">{{ format_number(stats.total_settled) }} <small class="text-muted">تومان</small></h3>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="p-3 border rounded">
+                    <div class="text-muted">موجودی نقدی</div>
+                    <h3 class="{{ 'text-success' if stats.cash_balance >= 0 else 'text-danger' }}">
+                        {{ format_number(stats.cash_balance) }} <small class="text-muted">تومان</small>
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

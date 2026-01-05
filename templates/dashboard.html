@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}داشبورد{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-house"></i> داشبورد</h2>
+
+<!-- آمار اصلی -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card success">
+            <div class="label"><i class="bi bi-cash"></i> درآمد کل فروش</div>
+            <div class="value">{{ format_number(stats.revenue) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card warning">
+            <div class="label"><i class="bi bi-box"></i> بهای تمام شده</div>
+            <div class="value">{{ format_number(stats.cogs) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card danger">
+            <div class="label"><i class="bi bi-percent"></i> کمیسیون‌ها</div>
+            <div class="value">{{ format_number(stats.commission) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card info">
+            <div class="label"><i class="bi bi-graph-up"></i> سود خالص</div>
+            <div class="value {{ 'text-profit' if stats.profit >= 0 else 'text-loss' }}">
+                {{ format_number(stats.profit) }}
+            </div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="label"><i class="bi bi-boxes"></i> موجودی انبار</div>
+            <div class="value">{{ format_number(stats.total_stock) }}</div>
+            <small class="text-muted">واحد</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="label"><i class="bi bi-gem"></i> ارزش موجودی</div>
+            <div class="value">{{ format_number(stats.inventory_value) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card success">
+            <div class="label"><i class="bi bi-check-circle"></i> تسویه شده</div>
+            <div class="value">{{ format_number(stats.total_settled) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stat-card {{ 'success' if stats.cash_balance >= 0 else 'danger' }}">
+            <div class="label"><i class="bi bi-bank"></i> موجودی نقدی</div>
+            <div class="value">{{ format_number(stats.cash_balance) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+</div>
+
+<!-- جدول بدهی مراکز -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-credit-card"></i> بدهی مراکز فروش
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>مرکز فروش</th>
+                        <th>کل فروش</th>
+                        <th>کمیسیون + ارسال</th>
+                        <th>قابل دریافت</th>
+                        <th>تسویه شده</th>
+                        <th>بدهی</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for debt in debts %}
+                    {% set receivable = debt.total_sales - debt.total_commission - debt.total_shipping %}
+                    {% set remaining = receivable - debt.settled %}
+                    <tr>
+                        <td><strong>{{ debt.name }}</strong></td>
+                        <td>{{ format_number(debt.total_sales) }}</td>
+                        <td>{{ format_number(debt.total_commission + debt.total_shipping) }}</td>
+                        <td>{{ format_number(receivable) }}</td>
+                        <td>{{ format_number(debt.settled) }}</td>
+                        <td class="{{ 'text-danger' if remaining > 0 else 'text-success' }}">
+                            <strong>{{ format_number(remaining) }}</strong>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

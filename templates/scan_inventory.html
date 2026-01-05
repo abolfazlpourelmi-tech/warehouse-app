@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+{% block title %}بررسی موجودی{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white mb-0"><i class="bi bi-search"></i> بررسی موجودی</h2>
+    <a href="{{ url_for('scan_menu') }}" class="btn btn-outline-light">
+        <i class="bi bi-arrow-right"></i> بازگشت
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-upc-scan"></i> اسکن بارکد برای مشاهده اطلاعات
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <label class="form-label fs-5">بارکد را اسکن کنید:</label>
+                    <input type="text" id="barcodeInput" class="form-control form-control-lg text-center" 
+                           placeholder="بارکد..." autofocus autocomplete="off">
+                </div>
+                
+                <!-- اطلاعات کالا -->
+                <div id="productInfo" class="d-none">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 text-center border-end">
+                                    <img id="barcodeImage" src="" class="img-fluid mb-2" style="max-height: 100px;">
+                                    <div id="barcodeText" class="text-muted small"></div>
+                                </div>
+                                <div class="col-md-8">
+                                    <h3 id="productName" class="mb-3"></h3>
+                                    <div class="row g-3">
+                                        <div class="col-6">
+                                            <div class="p-3 bg-white rounded shadow-sm">
+                                                <small class="text-muted">رنگ/مدل</small>
+                                                <div id="productColor" class="fs-5 fw-bold">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="p-3 bg-white rounded shadow-sm">
+                                                <small class="text-muted">موجودی</small>
+                                                <div id="productStock" class="fs-5 fw-bold text-primary">0</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="p-3 bg-white rounded shadow-sm">
+                                                <small class="text-muted">بهای تمام شده (FIFO)</small>
+                                                <div id="productCogs" class="fs-5 fw-bold">0 تومان</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="p-3 bg-white rounded shadow-sm">
+                                                <small class="text-muted">ارزش موجودی</small>
+                                                <div id="productValue" class="fs-5 fw-bold text-success">0 تومان</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <a id="linkInflow" href="#" class="btn btn-success">
+                                            <i class="bi bi-plus"></i> ثبت ورودی
+                                        </a>
+                                        <a id="linkOutflow" href="#" class="btn btn-danger">
+                                            <i class="bi bi-dash"></i> ثبت خروجی
+                                        </a>
+                                        <a id="linkPrint" href="#" class="btn btn-secondary" target="_blank">
+                                            <i class="bi bi-printer"></i> چاپ بارکد
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="notFound" class="d-none">
+                    <div class="alert alert-danger text-center">
+                        <i class="bi bi-x-circle fs-1"></i>
+                        <h4>محصول یافت نشد!</h4>
+                        <p>این بارکد در سیستم ثبت نشده است.</p>
+                        <a href="{{ url_for('products') }}" class="btn btn-primary">
+                            <i class="bi bi-plus"></i> افزودن کالای جدید
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- تاریخچه اسکن -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> تاریخچه اسکن این جلسه
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <div id="scanHistory" class="text-center text-muted">
+                    هنوز چیزی اسکن نشده
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let scanHistory = [];
+
+document.getElementById('barcodeInput').focus();
+
+document.getElementById('barcodeInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchBarcode(this.value.trim());
+    }
+});
+
+let searchTimeout;
+document.getElementById('barcodeInput').addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    const barcode = this.value.trim();
+    if (barcode.length >= 5) {
+        searchTimeout = setTimeout(() => searchBarcode(barcode), 300);
+    }
+});
+
+function searchBarcode(barcode) {
+    if (!barcode) return;
+    
+    fetch(`/api/barcode/search/${encodeURIComponent(barcode)}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('notFound').classList.add('d-none');
+            document.getElementById('productInfo').classList.add('d-none');
+            
+            if (data.found) {
+                showProduct(data.product);
+                addToHistory(data.product);
+                playBeep('success');
+            } else {
+                document.getElementById('notFound').classList.remove('d-none');
+                playBeep('error');
+            }
+            
+            // پاک کردن فیلد
+            setTimeout(() => {
+                document.getElementById('barcodeInput').value = '';
+                document.getElementById('barcodeInput').focus();
+            }, 100);
+        });
+}
+
+function showProduct(product) {
+    document.getElementById('productInfo').classList.remove('d-none');
+    
+    document.getElementById('productName').textContent = product.name;
+    document.getElementById('productColor').textContent = product.color || '-';
+    document.getElementById('productStock').textContent = product.stock;
+    document.getElementById('productCogs').textContent = Math.round(product.cogs).toLocaleString() + ' تومان';
+    document.getElementById('productValue').textContent = Math.round(product.stock * product.cogs).toLocaleString() + ' تومان';
+    
+    document.getElementById('barcodeText').textContent = product.barcode;
+    document.getElementById('barcodeImage').src = `/barcode/image/${product.barcode}`;
+    
+    document.getElementById('linkPrint').href = `/barcode/print/${product.id}`;
+}
+
+function addToHistory(product) {
+    const time = new Date().toLocaleTimeString('fa-IR');
+    scanHistory.unshift({
+        time: time,
+        name: product.name,
+        stock: product.stock
+    });
+    
+    if (scanHistory.length > 20) scanHistory.pop();
+    
+    const historyDiv = document.getElementById('scanHistory');
+    historyDiv.innerHTML = scanHistory.map(item => `
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+            <span>${item.name}</span>
+            <span>
+                <span class="badge bg-primary">${item.stock}</span>
+                <small class="text-muted me-2">${item.time}</small>
+            </span>
+        </div>
+    `).join('');
+}
+
+function playBeep(type) {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.frequency.value = type === 'success' ? 800 : 300;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.3;
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('barcodeInput').value = '';
+        document.getElementById('barcodeInput').focus();
+    }
+});
+</script>
+{% endblock %}

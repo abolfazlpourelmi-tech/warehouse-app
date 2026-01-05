@@ -1,0 +1,204 @@
+{% extends 'base.html' %}
+{% block title %}خروجی انبار{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-box-arrow-up"></i> خروجی انبار</h2>
+
+<div class="row">
+    <!-- فرم ثبت خروجی -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-plus-circle"></i> ثبت خروجی جدید
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_outflow') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">شماره سفارش</label>
+                        <input type="text" name="order_number" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">انتخاب کالا *</label>
+                        <select name="product_id" class="form-select" id="productSelect" required>
+                            <option value="">انتخاب کنید...</option>
+                            {% for product in products %}
+                            <option value="{{ product.id }}" data-stock="{{ product.stock }}">
+                                [{{ product.id }}] {{ product.name }} {% if product.color %}- {{ product.color }}{% endif %} 
+                                (موجودی: {{ product.stock }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">مرکز فروش *</label>
+                        <select name="center_id" class="form-select" required>
+                            {% for center in centers %}
+                            <option value="{{ center.id }}">{{ center.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">تعداد *</label>
+                            <input type="number" name="quantity" class="form-control" id="qtyInput"
+                                   step="0.01" min="0.01" required>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">قیمت فروش *</label>
+                            <input type="number" name="sell_price" class="form-control" min="0" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">کمیسیون</label>
+                            <input type="number" name="commission" class="form-control" min="0" value="0">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">هزینه ارسال</label>
+                            <input type="number" name="shipping" class="form-control" min="0" value="0">
+                        </div>
+                    </div>
+                    <div id="cogsInfo" class="alert alert-info d-none mb-3">
+                        بهای تمام شده: <strong id="cogsValue">-</strong> تومان
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">تاریخ</label>
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <input type="number" name="day" class="form-control" value="{{ today.day }}" 
+                                       min="1" max="31" required>
+                            </div>
+                            <div class="col-4">
+                                <select name="month" class="form-select" required>
+                                    {% for i in range(12) %}
+                                    <option value="{{ i+1 }}" {{ 'selected' if i+1 == today.month }}>
+                                        {{ persian_months[i] }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <input type="number" name="year" class="form-control" value="{{ today.year }}" 
+                                       min="1390" max="1450" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus"></i> ثبت خروجی
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- لیست خروجی‌ها -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list"></i> تاریخچه خروجی‌ها
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm">
+                        <thead>
+                            <tr>
+                                <th>سفارش</th>
+                                <th>کالا</th>
+                                <th>مرکز</th>
+                                <th>تعداد</th>
+                                <th>قیمت</th>
+                                <th>سود</th>
+                                <th>تاریخ</th>
+                                <th>وضعیت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for outflow in outflows %}
+                            {% set revenue = outflow.quantity * outflow.sell_price %}
+                            {% set profit = revenue - (outflow.quantity * outflow.cogs_unit) - outflow.commission_amount - outflow.shipping_cost %}
+                            <tr class="{{ 'table-secondary' if outflow.is_returned }}">
+                                <td>{{ outflow.order_number or '-' }}</td>
+                                <td>
+                                    <strong>{{ outflow.name }}</strong>
+                                    {% if outflow.color %}<br><small>{{ outflow.color }}</small>{% endif %}
+                                </td>
+                                <td><small>{{ outflow.center_name }}</small></td>
+                                <td>{{ outflow.quantity }}</td>
+                                <td>{{ format_number(outflow.sell_price) }}</td>
+                                <td class="{{ 'text-success' if profit >= 0 else 'text-danger' }}">
+                                    {{ format_number(profit) }}
+                                </td>
+                                <td><small>{{ gregorian_to_persian(outflow.outflow_date) }}</small></td>
+                                <td>
+                                    {% if outflow.is_returned %}
+                                    <span class="badge bg-danger">برگشتی</span>
+                                    {% endif %}
+                                    {% if outflow.is_paid %}
+                                    <span class="badge bg-success">پرداخت شده</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">در انتظار</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <form action="{{ url_for('toggle_return', outflow_id=outflow.id) }}" method="post" class="d-inline">
+                                            <button type="submit" class="btn btn-outline-{{ 'success' if outflow.is_returned else 'danger' }}" 
+                                                    title="{{ 'لغو برگشت' if outflow.is_returned else 'برگشت' }}">
+                                                <i class="bi bi-{{ 'arrow-counterclockwise' if outflow.is_returned else 'arrow-return-left' }}"></i>
+                                            </button>
+                                        </form>
+                                        <form action="{{ url_for('toggle_paid', outflow_id=outflow.id) }}" method="post" class="d-inline">
+                                            <button type="submit" class="btn btn-outline-{{ 'warning' if outflow.is_paid else 'success' }}"
+                                                    title="{{ 'لغو پرداخت' if outflow.is_paid else 'پرداخت شده' }}">
+                                                <i class="bi bi-{{ 'x-circle' if outflow.is_paid else 'check-circle' }}"></i>
+                                            </button>
+                                        </form>
+                                        <form action="{{ url_for('delete_outflow', outflow_id=outflow.id) }}" method="post" class="d-inline"
+                                              onsubmit="return confirm('آیا مطمئنید؟')">
+                                            <button type="submit" class="btn btn-outline-danger">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('productSelect').addEventListener('change', updateCogs);
+document.getElementById('qtyInput').addEventListener('input', updateCogs);
+
+function updateCogs() {
+    const productId = document.getElementById('productSelect').value;
+    const qty = document.getElementById('qtyInput').value;
+    
+    if (productId && qty > 0) {
+        fetch(`/api/fifo_cost/${productId}/${qty}`)
+            .then(r => r.json())
+            .then(data => {
+                const cogsDiv = document.getElementById('cogsInfo');
+                const cogsVal = document.getElementById('cogsValue');
+                if (data.cogs) {
+                    cogsVal.textContent = Math.round(data.cogs).toLocaleString('fa-IR');
+                    cogsDiv.classList.remove('d-none', 'alert-danger');
+                    cogsDiv.classList.add('alert-info');
+                } else {
+                    cogsVal.textContent = 'موجودی کافی نیست!';
+                    cogsDiv.classList.remove('d-none', 'alert-info');
+                    cogsDiv.classList.add('alert-danger');
+                }
+            });
+    }
+}
+</script>
+{% endblock %}

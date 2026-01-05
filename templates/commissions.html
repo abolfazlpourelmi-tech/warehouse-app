@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% block title %}کمیسیون‌ها{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-percent"></i> تنظیمات کمیسیون</h2>
+
+<div class="row">
+    <!-- دسته‌بندی‌ها -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-folder"></i> دسته‌بندی‌ها
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_category') }}" method="post" class="mb-3">
+                    <div class="input-group">
+                        <input type="text" name="name" class="form-control" placeholder="نام دسته‌بندی" required>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-plus"></i></button>
+                    </div>
+                </form>
+                <ul class="list-group">
+                    {% for cat in categories %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        {{ cat.name }}
+                        <span class="badge bg-secondary">{{ cat.id }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- تنظیم کمیسیون -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-gear"></i> تنظیم کمیسیون
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('set_commission') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">مرکز فروش</label>
+                        <select name="center_id" class="form-select" required>
+                            {% for center in centers %}
+                            <option value="{{ center.id }}">{{ center.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">دسته‌بندی</label>
+                        <select name="category_id" class="form-select" required>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">درصد کمیسیون</label>
+                        <input type="number" name="percent" class="form-control" step="0.1" min="0" max="100" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-check"></i> ثبت کمیسیون
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- دسته‌بندی محصولات -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-tag"></i> دسته‌بندی محصولات
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('set_product_category') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">محصول</label>
+                        <select name="product_id" class="form-select" required>
+                            {% for product in products %}
+                            <option value="{{ product.id }}">
+                                [{{ product.id }}] {{ product.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">دسته‌بندی</label>
+                        <select name="category_id" class="form-select" required>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-check"></i> ذخیره
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ماتریس کمیسیون -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-table"></i> ماتریس کمیسیون
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>دسته‌بندی</th>
+                        {% for center in centers %}
+                        <th>{{ center.name }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cat in categories %}
+                    <tr>
+                        <td><strong>{{ cat.name }}</strong></td>
+                        {% for center in centers %}
+                        <td>
+                            {% set comm = commissions | selectattr('center_id', 'equalto', center.id) | selectattr('category_id', 'equalto', cat.id) | first %}
+                            {{ comm.commission_percent if comm else 0 }}%
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}اسکن بارکد{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-upc-scan"></i> اسکن بارکد</h2>
+
+<div class="row g-4">
+    <!-- اسکن ورودی -->
+    <div class="col-md-4">
+        <a href="{{ url_for('scan_inflow') }}" class="text-decoration-none">
+            <div class="card h-100 border-0 shadow hover-card">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-box-arrow-in-down text-success" style="font-size: 4rem;"></i>
+                    <h3 class="mt-3">📥 ورودی انبار</h3>
+                    <p class="text-muted">اسکن بارکد برای ثبت ورودی</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    
+    <!-- اسکن خروجی -->
+    <div class="col-md-4">
+        <a href="{{ url_for('scan_outflow') }}" class="text-decoration-none">
+            <div class="card h-100 border-0 shadow hover-card">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-box-arrow-up text-danger" style="font-size: 4rem;"></i>
+                    <h3 class="mt-3">📤 خروجی انبار</h3>
+                    <p class="text-muted">اسکن بارکد برای ثبت خروجی</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    
+    <!-- بررسی موجودی -->
+    <div class="col-md-4">
+        <a href="{{ url_for('scan_inventory') }}" class="text-decoration-none">
+            <div class="card h-100 border-0 shadow hover-card">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-search text-primary" style="font-size: 4rem;"></i>
+                    <h3 class="mt-3">🔍 بررسی موجودی</h3>
+                    <p class="text-muted">اسکن برای مشاهده اطلاعات کالا</p>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- چاپ بارکد -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <a href="{{ url_for('print_barcodes') }}" class="text-decoration-none">
+            <div class="card border-0 shadow">
+                <div class="card-body d-flex align-items-center">
+                    <i class="bi bi-printer text-info me-3" style="font-size: 2.5rem;"></i>
+                    <div>
+                        <h4 class="mb-0">🖨️ چاپ بارکد</h4>
+                        <small class="text-muted">چاپ بارکد برای همه محصولات</small>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<style>
+.hover-card {
+    transition: transform 0.3s, box-shadow 0.3s;
+    cursor: pointer;
+}
+.hover-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2) !important;
+}
+</style>
+{% endblock %}

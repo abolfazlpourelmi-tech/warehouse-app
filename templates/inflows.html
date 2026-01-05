@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}ورودی انبار{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-box-arrow-in-down"></i> ورودی انبار</h2>
+
+<div class="row">
+    <!-- فرم ثبت ورودی -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-plus-circle"></i> ثبت ورودی جدید
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_inflow') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">انتخاب کالا *</label>
+                        <select name="product_id" class="form-select" required>
+                            <option value="">انتخاب کنید...</option>
+                            {% for product in products %}
+                            <option value="{{ product.id }}">
+                                [{{ product.id }}] {{ product.name }} {% if product.color %}- {{ product.color }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">تعداد *</label>
+                            <input type="number" name="quantity" class="form-control" step="0.01" min="0.01" required>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">قیمت خرید *</label>
+                            <input type="number" name="buy_price" class="form-control" min="0" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">نرخ دلار (تومان)</label>
+                        <input type="number" name="dollar_rate" class="form-control" min="0" value="0">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">تاریخ</label>
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <input type="number" name="day" class="form-control" placeholder="روز" 
+                                       value="{{ today.day }}" min="1" max="31" required>
+                            </div>
+                            <div class="col-4">
+                                <select name="month" class="form-select" required>
+                                    {% for i in range(12) %}
+                                    <option value="{{ i+1 }}" {{ 'selected' if i+1 == today.month }}>
+                                        {{ persian_months[i] }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <input type="number" name="year" class="form-control" placeholder="سال" 
+                                       value="{{ today.year }}" min="1390" max="1450" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-plus"></i> ثبت ورودی
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- لیست ورودی‌ها -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list"></i> تاریخچه ورودی‌ها
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>کد</th>
+                                <th>کالا</th>
+                                <th>تعداد</th>
+                                <th>قیمت خرید</th>
+                                <th>مبلغ کل</th>
+                                <th>تاریخ</th>
+                                <th>باقیمانده</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for inflow in inflows %}
+                            <tr>
+                                <td>{{ inflow.id }}</td>
+                                <td>
+                                    <strong>{{ inflow.name }}</strong>
+                                    {% if inflow.color %}<br><small class="text-muted">{{ inflow.color }}</small>{% endif %}
+                                </td>
+                                <td>{{ inflow.quantity }}</td>
+                                <td>{{ format_number(inflow.buy_price) }}</td>
+                                <td>{{ format_number(inflow.quantity * inflow.buy_price) }}</td>
+                                <td>{{ gregorian_to_persian(inflow.inflow_date) }}</td>
+                                <td>
+                                    <span class="badge {{ 'bg-success' if inflow.remaining > 0 else 'bg-secondary' }}">
+                                        {{ inflow.remaining }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if inflow.remaining == inflow.quantity %}
+                                    <form action="{{ url_for('delete_inflow', inflow_id=inflow.id) }}" 
+                                          method="post" class="d-inline"
+                                          onsubmit="return confirm('آیا مطمئنید؟')">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

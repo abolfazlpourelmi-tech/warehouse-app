@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% block title %}تسویه حساب{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-cash-stack"></i> تسویه حساب</h2>
+
+<div class="row">
+    <!-- فرم ثبت تسویه -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-plus-circle"></i> ثبت تسویه جدید
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_settlement') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">مرکز فروش *</label>
+                        <select name="center_id" class="form-select" required>
+                            {% for center in centers %}
+                            <option value="{{ center.id }}">{{ center.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">مبلغ (تومان) *</label>
+                        <input type="number" name="amount" class="form-control" min="0" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">توضیحات</label>
+                        <input type="text" name="description" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">تاریخ</label>
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <input type="number" name="day" class="form-control" value="{{ today.day }}" 
+                                       min="1" max="31" required>
+                            </div>
+                            <div class="col-4">
+                                <select name="month" class="form-select" required>
+                                    {% for i in range(12) %}
+                                    <option value="{{ i+1 }}" {{ 'selected' if i+1 == today.month }}>
+                                        {{ persian_months[i] }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <input type="number" name="year" class="form-control" value="{{ today.year }}" 
+                                       min="1390" max="1450" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-check"></i> ثبت تسویه
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- بدهی مراکز -->
+    <div class="col-md-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-credit-card"></i> بدهی مراکز فروش
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>مرکز</th>
+                                <th>فروش</th>
+                                <th>کمیسیون+ارسال</th>
+                                <th>قابل دریافت</th>
+                                <th>تسویه شده</th>
+                                <th>بدهی</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for debt in debts %}
+                            {% set receivable = debt.total_sales - debt.total_commission - debt.total_shipping %}
+                            {% set remaining = receivable - debt.settled %}
+                            <tr>
+                                <td><strong>{{ debt.name }}</strong></td>
+                                <td>{{ format_number(debt.total_sales) }}</td>
+                                <td>{{ format_number(debt.total_commission + debt.total_shipping) }}</td>
+                                <td>{{ format_number(receivable) }}</td>
+                                <td class="text-success">{{ format_number(debt.settled) }}</td>
+                                <td class="{{ 'text-danger' if remaining > 0 else 'text-success' }}">
+                                    <strong>{{ format_number(remaining) }}</strong>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- تاریخچه تسویه‌ها -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-list"></i> تاریخچه تسویه‌ها
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>کد</th>
+                        <th>مرکز</th>
+                        <th>مبلغ</th>
+                        <th>تاریخ</th>
+                        <th>توضیحات</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for settlement in settlements %}
+                    <tr>
+                        <td>{{ settlement.id }}</td>
+                        <td><strong>{{ settlement.center_name }}</strong></td>
+                        <td class="text-success">{{ format_number(settlement.amount) }}</td>
+                        <td>{{ gregorian_to_persian(settlement.settlement_date) }}</td>
+                        <td>{{ settlement.description or '-' }}</td>
+                        <td>
+                            <form action="{{ url_for('delete_settlement', settlement_id=settlement.id) }}" 
+                                  method="post" class="d-inline"
+                                  onsubmit="return confirm('آیا مطمئنید؟')">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

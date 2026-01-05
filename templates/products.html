@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block title %}مدیریت کالا{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-box"></i> مدیریت کالا</h2>
+
+<div class="row">
+    <!-- فرم افزودن -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-plus-circle"></i> افزودن کالای جدید
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_product') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">نام کالا *</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">رنگ / مدل</label>
+                        <input type="text" name="color" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">بارکد</label>
+                        <input type="text" name="barcode" class="form-control" placeholder="خالی = خودکار">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus"></i> افزودن کالا
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- لیست کالاها -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list"></i> لیست کالاها</span>
+                <form class="d-flex gap-2" method="get">
+                    <select name="filter" class="form-select form-select-sm" style="width:120px" onchange="this.form.submit()">
+                        <option value="all" {{ 'selected' if filter == 'all' }}>همه</option>
+                        <option value="available" {{ 'selected' if filter == 'available' }}>موجود</option>
+                        <option value="unavailable" {{ 'selected' if filter == 'unavailable' }}>ناموجود</option>
+                    </select>
+                    <input type="text" name="search" class="form-control form-control-sm" placeholder="جستجو..." 
+                           value="{{ search }}" style="width:150px">
+                    <button type="submit" class="btn btn-light btn-sm"><i class="bi bi-search"></i></button>
+                </form>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>کد</th>
+                                <th>نام</th>
+                                <th>رنگ</th>
+                                <th>بارکد</th>
+                                <th>موجودی</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for product in products %}
+                            <tr>
+                                <td>{{ product.id }}</td>
+                                <td><strong>{{ product.name }}</strong></td>
+                                <td>{{ product.color or '-' }}</td>
+                                <td><small>{{ product.barcode or '-' }}</small></td>
+                                <td>
+                                    <span class="badge {{ 'bg-success' if product.stock > 0 else 'bg-danger' }}">
+                                        {{ product.stock }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('generate_barcode', product_id=product.id) }}" 
+                                       class="btn btn-sm btn-info" title="بارکد">
+                                        <i class="bi bi-upc"></i>
+                                    </a>
+                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" 
+                                            data-bs-target="#editModal{{ product.id }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form action="{{ url_for('delete_product', product_id=product.id) }}" 
+                                          method="post" class="d-inline" 
+                                          onsubmit="return confirm('آیا مطمئنید؟')">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            
+                            <!-- Modal ویرایش -->
+                            <div class="modal fade" id="editModal{{ product.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form action="{{ url_for('edit_product', product_id=product.id) }}" method="post">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">ویرایش کالا</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">نام</label>
+                                                    <input type="text" name="name" class="form-control" 
+                                                           value="{{ product.name }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">رنگ</label>
+                                                    <input type="text" name="color" class="form-control" 
+                                                           value="{{ product.color }}">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">بارکد</label>
+                                                    <input type="text" name="barcode" class="form-control" 
+                                                           value="{{ product.barcode }}">
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                                                <button type="submit" class="btn btn-primary">ذخیره</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

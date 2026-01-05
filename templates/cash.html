@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+{% block title %}حساب نقدی{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-bank"></i> حساب نقدی</h2>
+
+<!-- خلاصه -->
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card success">
+            <div class="label"><i class="bi bi-arrow-down-circle"></i> مجموع واریزها</div>
+            <div class="value">{{ format_number(deposits) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card danger">
+            <div class="label"><i class="bi bi-arrow-up-circle"></i> مجموع برداشت‌ها</div>
+            <div class="value">{{ format_number(withdraws) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card {{ 'success' if balance >= 0 else 'danger' }}">
+            <div class="label"><i class="bi bi-wallet2"></i> موجودی</div>
+            <div class="value">{{ format_number(balance) }}</div>
+            <small class="text-muted">تومان</small>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- فرم ثبت تراکنش -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-plus-circle"></i> ثبت تراکنش
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_cash_transaction') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">نوع تراکنش</label>
+                        <select name="type" class="form-select" id="transType">
+                            <option value="deposit">📥 واریز</option>
+                            <option value="withdraw">📤 برداشت</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">مبلغ (تومان) *</label>
+                        <input type="number" name="amount" class="form-control" min="0" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" id="sourceLabel">از کجا</label>
+                        <select name="source" class="form-select" id="sourceSelect">
+                            <option>اسنپ شاپ</option>
+                            <option>دیجی کالا</option>
+                            <option>نایتو</option>
+                            <option>فروش حضوری</option>
+                            <option>سایر</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">توضیحات</label>
+                        <input type="text" name="description" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">تاریخ</label>
+                        <div class="row g-2">
+                            <div class="col-4">
+                                <input type="number" name="day" class="form-control" value="{{ today.day }}" 
+                                       min="1" max="31" required>
+                            </div>
+                            <div class="col-4">
+                                <select name="month" class="form-select" required>
+                                    {% for i in range(12) %}
+                                    <option value="{{ i+1 }}" {{ 'selected' if i+1 == today.month }}>
+                                        {{ persian_months[i] }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <input type="number" name="year" class="form-control" value="{{ today.year }}" 
+                                       min="1390" max="1450" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus"></i> ثبت تراکنش
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- تاریخچه -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list"></i> تاریخچه تراکنش‌ها
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>کد</th>
+                                <th>نوع</th>
+                                <th>مبلغ</th>
+                                <th>منبع/مقصد</th>
+                                <th>تاریخ</th>
+                                <th>توضیحات</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trans in transactions %}
+                            <tr>
+                                <td>{{ trans.id }}</td>
+                                <td>
+                                    {% if trans.transaction_type == 'deposit' %}
+                                    <span class="badge bg-success">📥 واریز</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">📤 برداشت</span>
+                                    {% endif %}
+                                </td>
+                                <td class="{{ 'text-success' if trans.transaction_type == 'deposit' else 'text-danger' }}">
+                                    <strong>{{ format_number(trans.amount) }}</strong>
+                                </td>
+                                <td>{{ trans.source or '-' }}</td>
+                                <td>{{ gregorian_to_persian(trans.transaction_date) }}</td>
+                                <td>{{ trans.description or '-' }}</td>
+                                <td>
+                                    <form action="{{ url_for('delete_cash_transaction', trans_id=trans.id) }}" 
+                                          method="post" class="d-inline"
+                                          onsubmit="return confirm('آیا مطمئنید؟')">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('transType').addEventListener('change', function() {
+    const sourceSelect = document.getElementById('sourceSelect');
+    const sourceLabel = document.getElementById('sourceLabel');
+    
+    if (this.value === 'deposit') {
+        sourceLabel.textContent = 'از کجا';
+        sourceSelect.innerHTML = `
+            <option>اسنپ شاپ</option>
+            <option>دیجی کالا</option>
+            <option>نایتو</option>
+            <option>فروش حضوری</option>
+            <option>سایر</option>
+        `;
+    } else {
+        sourceLabel.textContent = 'برای چی';
+        sourceSelect.innerHTML = `
+            <option>خرید کالا</option>
+            <option>هزینه ارسال</option>
+            <option>هزینه بسته‌بندی</option>
+            <option>سایر</option>
+        `;
+    }
+});
+</script>
+{% endblock %}

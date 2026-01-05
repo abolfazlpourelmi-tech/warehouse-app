@@ -1,0 +1,343 @@
+{% extends 'base.html' %}
+{% block title %}اسکن خروجی{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white mb-0"><i class="bi bi-box-arrow-up"></i> اسکن خروجی انبار</h2>
+    <a href="{{ url_for('scan_menu') }}" class="btn btn-outline-light">
+        <i class="bi bi-arrow-right"></i> بازگشت
+    </a>
+</div>
+
+<div class="row">
+    <!-- بخش اسکن -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <i class="bi bi-upc-scan"></i> اسکن بارکد
+            </div>
+            <div class="card-body">
+                <!-- تنظیمات سفارش -->
+                <div class="row g-3 mb-4 p-3 bg-light rounded">
+                    <div class="col-md-6">
+                        <label class="form-label">مرکز فروش</label>
+                        <select id="centerSelect" class="form-select">
+                            {% for center in centers %}
+                            <option value="{{ center.id }}">{{ center.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">شماره سفارش</label>
+                        <input type="text" id="orderNumber" class="form-control" placeholder="اختیاری">
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label fs-5">بارکد را اسکن کنید:</label>
+                    <input type="text" id="barcodeInput" class="form-control form-control-lg text-center" 
+                           placeholder="بارکد..." autofocus autocomplete="off">
+                </div>
+                
+                <!-- اطلاعات کالا -->
+                <div id="productInfo" class="d-none">
+                    <div class="alert alert-warning">
+                        <h5 id="productName" class="mb-2"></h5>
+                        <div class="row">
+                            <div class="col-4">
+                                <small>رنگ: <span id="productColor">-</span></small>
+                            </div>
+                            <div class="col-4">
+                                <small>موجودی: <span id="productStock" class="badge bg-primary">0</span></small>
+                            </div>
+                            <div class="col-4">
+                                <small>بهای تمام شده: <span id="productCogs">0</span></small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-4">
+                            <label class="form-label">تعداد</label>
+                            <input type="number" id="quantity" class="form-control" value="1" min="1">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">قیمت فروش</label>
+                            <input type="number" id="sellPrice" class="form-control" value="0" min="0">
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">کمیسیون</label>
+                            <input type="number" id="commission" class="form-control" value="0" min="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">هزینه ارسال</label>
+                            <input type="number" id="shipping" class="form-control" value="0" min="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">سود پیش‌بینی</label>
+                            <input type="text" id="profitPreview" class="form-control" readonly>
+                        </div>
+                        <div class="col-12">
+                            <button id="submitBtn" class="btn btn-danger btn-lg w-100">
+                                <i class="bi bi-dash-circle"></i> ثبت خروجی
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="notFound" class="d-none">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle"></i> محصول یافت نشد!
+                    </div>
+                </div>
+                
+                <div id="noStock" class="d-none">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> موجودی کافی نیست!
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- لیست خروجی‌ها -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-check"></i> خروجی‌های ثبت شده
+                <span id="totalCount" class="badge bg-danger float-end">0</span>
+            </div>
+            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>کالا</th>
+                            <th>تعداد</th>
+                            <th>قیمت</th>
+                            <th>سود</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTable">
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">هنوز چیزی ثبت نشده</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <small class="text-muted">جمع فروش:</small>
+                        <div id="totalSales" class="fw-bold">0</div>
+                    </div>
+                    <div class="col-6">
+                        <small class="text-muted">جمع سود:</small>
+                        <div id="totalProfit" class="fw-bold text-success">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentProduct = null;
+let logCount = 0;
+let totalSales = 0;
+let totalProfit = 0;
+
+document.getElementById('barcodeInput').focus();
+
+// جستجوی بارکد
+document.getElementById('barcodeInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchBarcode(this.value.trim());
+    }
+});
+
+let searchTimeout;
+document.getElementById('barcodeInput').addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    const barcode = this.value.trim();
+    if (barcode.length >= 5) {
+        searchTimeout = setTimeout(() => searchBarcode(barcode), 300);
+    }
+});
+
+function searchBarcode(barcode) {
+    if (!barcode) return;
+    
+    fetch(`/api/barcode/search/${encodeURIComponent(barcode)}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('notFound').classList.add('d-none');
+            document.getElementById('noStock').classList.add('d-none');
+            
+            if (data.found) {
+                if (data.product.stock > 0) {
+                    showProduct(data.product);
+                    playBeep('success');
+                } else {
+                    hideProduct();
+                    document.getElementById('noStock').classList.remove('d-none');
+                    playBeep('error');
+                }
+            } else {
+                hideProduct();
+                document.getElementById('notFound').classList.remove('d-none');
+                playBeep('error');
+            }
+        });
+}
+
+function showProduct(product) {
+    currentProduct = product;
+    document.getElementById('productInfo').classList.remove('d-none');
+    
+    document.getElementById('productName').textContent = product.name;
+    document.getElementById('productColor').textContent = product.color || '-';
+    document.getElementById('productStock').textContent = product.stock;
+    document.getElementById('productCogs').textContent = Math.round(product.cogs).toLocaleString();
+    
+    document.getElementById('quantity').max = product.stock;
+    document.getElementById('quantity').focus();
+    document.getElementById('quantity').select();
+    
+    updateProfitPreview();
+}
+
+function hideProduct() {
+    document.getElementById('productInfo').classList.add('d-none');
+    currentProduct = null;
+}
+
+// محاسبه سود پیش‌بینی
+['quantity', 'sellPrice', 'commission', 'shipping'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateProfitPreview);
+});
+
+function updateProfitPreview() {
+    if (!currentProduct) return;
+    
+    const qty = parseFloat(document.getElementById('quantity').value) || 0;
+    const sellPrice = parseFloat(document.getElementById('sellPrice').value) || 0;
+    const commission = parseFloat(document.getElementById('commission').value) || 0;
+    const shipping = parseFloat(document.getElementById('shipping').value) || 0;
+    
+    const revenue = qty * sellPrice;
+    const cost = qty * currentProduct.cogs;
+    const profit = revenue - cost - commission - shipping;
+    
+    const profitInput = document.getElementById('profitPreview');
+    profitInput.value = Math.round(profit).toLocaleString();
+    profitInput.style.color = profit >= 0 ? 'green' : 'red';
+}
+
+// ثبت خروجی
+document.getElementById('submitBtn').addEventListener('click', submitOutflow);
+document.getElementById('sellPrice').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') submitOutflow();
+});
+
+function submitOutflow() {
+    if (!currentProduct) return;
+    
+    const quantity = parseFloat(document.getElementById('quantity').value);
+    const sellPrice = parseFloat(document.getElementById('sellPrice').value);
+    const commission = parseFloat(document.getElementById('commission').value);
+    const shipping = parseFloat(document.getElementById('shipping').value);
+    const centerId = document.getElementById('centerSelect').value;
+    const orderNumber = document.getElementById('orderNumber').value;
+    
+    if (quantity <= 0 || quantity > currentProduct.stock) {
+        alert('تعداد نامعتبر است');
+        return;
+    }
+    
+    fetch('/api/scan/outflow', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            barcode: currentProduct.barcode,
+            quantity: quantity,
+            sell_price: sellPrice,
+            center_id: centerId,
+            commission: commission,
+            shipping: shipping,
+            order_number: orderNumber
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const profit = (quantity * sellPrice) - (quantity * currentProduct.cogs) - commission - shipping;
+            addToLog(data.product.name, quantity, sellPrice, profit);
+            playBeep('success');
+            
+            // ریست
+            document.getElementById('barcodeInput').value = '';
+            document.getElementById('quantity').value = '1';
+            document.getElementById('barcodeInput').focus();
+            hideProduct();
+        } else {
+            alert(data.message);
+            playBeep('error');
+        }
+    });
+}
+
+function addToLog(name, qty, price, profit) {
+    logCount++;
+    totalSales += qty * price;
+    totalProfit += profit;
+    
+    document.getElementById('totalCount').textContent = logCount;
+    document.getElementById('totalSales').textContent = Math.round(totalSales).toLocaleString();
+    document.getElementById('totalProfit').textContent = Math.round(totalProfit).toLocaleString();
+    
+    const tbody = document.getElementById('logTable');
+    if (logCount === 1) {
+        tbody.innerHTML = '';
+    }
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>${name}</td>
+        <td><span class="badge bg-danger">-${qty}</span></td>
+        <td>${price.toLocaleString()}</td>
+        <td class="${profit >= 0 ? 'text-success' : 'text-danger'}">${Math.round(profit).toLocaleString()}</td>
+    `;
+    tbody.insertBefore(row, tbody.firstChild);
+}
+
+function playBeep(type) {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.frequency.value = type === 'success' ? 800 : 300;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.3;
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('barcodeInput').value = '';
+        document.getElementById('barcodeInput').focus();
+        hideProduct();
+        document.getElementById('notFound').classList.add('d-none');
+        document.getElementById('noStock').classList.add('d-none');
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+{% block title %}اسکن ورودی{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="text-white mb-0"><i class="bi bi-box-arrow-in-down"></i> اسکن ورودی انبار</h2>
+    <a href="{{ url_for('scan_menu') }}" class="btn btn-outline-light">
+        <i class="bi bi-arrow-right"></i> بازگشت
+    </a>
+</div>
+
+<div class="row">
+    <!-- بخش اسکن -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <i class="bi bi-upc-scan"></i> اسکن بارکد
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <label class="form-label fs-5">بارکد را اسکن کنید:</label>
+                    <input type="text" id="barcodeInput" class="form-control form-control-lg text-center" 
+                           placeholder="بارکد..." autofocus autocomplete="off">
+                    <small class="text-muted">بارکدخوان اینجا تایپ می‌کند</small>
+                </div>
+                
+                <!-- اطلاعات کالای اسکن شده -->
+                <div id="productInfo" class="d-none">
+                    <div class="alert alert-info">
+                        <h5 id="productName" class="mb-2"></h5>
+                        <div class="row">
+                            <div class="col-6">
+                                <small>رنگ: <span id="productColor">-</span></small>
+                            </div>
+                            <div class="col-6">
+                                <small>موجودی: <span id="productStock" class="badge bg-primary">0</span></small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label">تعداد</label>
+                            <input type="number" id="quantity" class="form-control" value="1" min="1">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">قیمت خرید (تومان)</label>
+                            <input type="number" id="buyPrice" class="form-control" value="0" min="0">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">نرخ دلار</label>
+                            <input type="number" id="dollarRate" class="form-control" value="0" min="0">
+                        </div>
+                        <div class="col-12">
+                            <button id="submitBtn" class="btn btn-success btn-lg w-100">
+                                <i class="bi bi-plus-circle"></i> ثبت ورودی
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="notFound" class="d-none">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle"></i> محصول یافت نشد!
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- لیست ثبت شده -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list-check"></i> ورودی‌های ثبت شده
+                <span id="totalCount" class="badge bg-primary float-end">0</span>
+            </div>
+            <div class="card-body" style="max-height: 500px; overflow-y: auto;">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>کالا</th>
+                            <th>تعداد</th>
+                            <th>قیمت</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logTable">
+                        <tr>
+                            <td colspan="3" class="text-center text-muted">هنوز چیزی ثبت نشده</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- صدای بیپ -->
+<audio id="beepSuccess" preload="auto">
+    <source src="data:audio/wav;base64,UklGRl9vT19teleVRm10teleVZGF0YQ==" type="audio/wav">
+</audio>
+<audio id="beepError" preload="auto">
+    <source src="data:audio/wav;base64,UklGRl9vT19teleVRm10teleVZGF0YQ==" type="audio/wav">
+</audio>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentProduct = null;
+let logCount = 0;
+
+// فوکوس روی فیلد بارکد
+document.getElementById('barcodeInput').focus();
+
+// جستجوی بارکد با Enter
+document.getElementById('barcodeInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchBarcode(this.value.trim());
+    }
+});
+
+// همچنین با تغییر مقدار (برای بارکدخوان‌های سریع)
+let searchTimeout;
+document.getElementById('barcodeInput').addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    const barcode = this.value.trim();
+    if (barcode.length >= 5) {
+        searchTimeout = setTimeout(() => searchBarcode(barcode), 300);
+    }
+});
+
+function searchBarcode(barcode) {
+    if (!barcode) return;
+    
+    fetch(`/api/barcode/search/${encodeURIComponent(barcode)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.found) {
+                showProduct(data.product);
+                playBeep('success');
+            } else {
+                hideProduct();
+                document.getElementById('notFound').classList.remove('d-none');
+                playBeep('error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            playBeep('error');
+        });
+}
+
+function showProduct(product) {
+    currentProduct = product;
+    document.getElementById('productInfo').classList.remove('d-none');
+    document.getElementById('notFound').classList.add('d-none');
+    
+    document.getElementById('productName').textContent = product.name;
+    document.getElementById('productColor').textContent = product.color || '-';
+    document.getElementById('productStock').textContent = product.stock;
+    
+    document.getElementById('quantity').focus();
+    document.getElementById('quantity').select();
+}
+
+function hideProduct() {
+    document.getElementById('productInfo').classList.add('d-none');
+    currentProduct = null;
+}
+
+// ثبت ورودی
+document.getElementById('submitBtn').addEventListener('click', submitInflow);
+document.getElementById('buyPrice').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') submitInflow();
+});
+
+function submitInflow() {
+    if (!currentProduct) return;
+    
+    const quantity = parseFloat(document.getElementById('quantity').value);
+    const buyPrice = parseFloat(document.getElementById('buyPrice').value);
+    const dollarRate = parseFloat(document.getElementById('dollarRate').value);
+    
+    if (quantity <= 0) {
+        alert('تعداد باید بیشتر از صفر باشد');
+        return;
+    }
+    
+    fetch('/api/scan/inflow', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            barcode: currentProduct.barcode,
+            quantity: quantity,
+            buy_price: buyPrice,
+            dollar_rate: dollarRate
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            addToLog(data.product.name, quantity, buyPrice);
+            playBeep('success');
+            
+            // ریست فرم
+            document.getElementById('barcodeInput').value = '';
+            document.getElementById('quantity').value = '1';
+            document.getElementById('barcodeInput').focus();
+            hideProduct();
+        } else {
+            alert(data.message);
+            playBeep('error');
+        }
+    });
+}
+
+function addToLog(name, qty, price) {
+    logCount++;
+    document.getElementById('totalCount').textContent = logCount;
+    
+    const tbody = document.getElementById('logTable');
+    if (logCount === 1) {
+        tbody.innerHTML = '';
+    }
+    
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>${name}</td>
+        <td><span class="badge bg-success">+${qty}</span></td>
+        <td>${price.toLocaleString()}</td>
+    `;
+    tbody.insertBefore(row, tbody.firstChild);
+}
+
+function playBeep(type) {
+    // استفاده از Web Audio API برای بیپ
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        
+        oscillator.frequency.value = type === 'success' ? 800 : 300;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.3;
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    } catch(e) {}
+}
+
+// کلید میانبر: Escape برای پاک کردن
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('barcodeInput').value = '';
+        document.getElementById('barcodeInput').focus();
+        hideProduct();
+        document.getElementById('notFound').classList.add('d-none');
+    }
+});
+</script>
+{% endblock %}

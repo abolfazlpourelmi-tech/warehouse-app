@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}مراکز فروش{% endblock %}
+
+{% block content %}
+<h2 class="text-white mb-4"><i class="bi bi-shop"></i> مراکز فروش</h2>
+
+<div class="row">
+    <!-- فرم افزودن -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-plus-circle"></i> افزودن مرکز جدید
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('add_center') }}" method="post">
+                    <div class="mb-3">
+                        <label class="form-label">نام مرکز *</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">نوع محاسبه ارسال</label>
+                        <select name="shipping_type" class="form-select" id="shippingType">
+                            <option value="manual">دستی</option>
+                            <option value="percent">درصدی</option>
+                            <option value="fixed">ثابت</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">درصد ارسال</label>
+                        <input type="number" name="shipping_percent" class="form-control" step="0.1" value="0">
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label">حداقل ارسال</label>
+                            <input type="number" name="shipping_min" class="form-control" value="0">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label">حداکثر ارسال</label>
+                            <input type="number" name="shipping_max" class="form-control" value="0">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">هزینه ثابت ارسال</label>
+                        <input type="number" name="shipping_fixed" class="form-control" value="0">
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-plus"></i> افزودن مرکز
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- لیست مراکز -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-list"></i> لیست مراکز فروش
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>کد</th>
+                                <th>نام</th>
+                                <th>نوع ارسال</th>
+                                <th>درصد</th>
+                                <th>حداقل</th>
+                                <th>حداکثر</th>
+                                <th>ثابت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for center in centers %}
+                            <tr>
+                                <td>{{ center.id }}</td>
+                                <td><strong>{{ center.name }}</strong></td>
+                                <td>
+                                    {% if center.shipping_type == 'manual' %}دستی
+                                    {% elif center.shipping_type == 'percent' %}درصدی
+                                    {% else %}ثابت{% endif %}
+                                </td>
+                                <td>{{ center.shipping_percent }}%</td>
+                                <td>{{ format_number(center.shipping_min) }}</td>
+                                <td>{{ format_number(center.shipping_max) }}</td>
+                                <td>{{ format_number(center.shipping_fixed) }}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-warning" data-bs-toggle="modal" 
+                                            data-bs-target="#editModal{{ center.id }}">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            
+                            <!-- Modal ویرایش -->
+                            <div class="modal fade" id="editModal{{ center.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form action="{{ url_for('edit_center', center_id=center.id) }}" method="post">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">ویرایش مرکز</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="mb-3">
+                                                    <label class="form-label">نام</label>
+                                                    <input type="text" name="name" class="form-control" 
+                                                           value="{{ center.name }}" required>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">نوع ارسال</label>
+                                                    <select name="shipping_type" class="form-select">
+                                                        <option value="manual" {{ 'selected' if center.shipping_type == 'manual' }}>دستی</option>
+                                                        <option value="percent" {{ 'selected' if center.shipping_type == 'percent' }}>درصدی</option>
+                                                        <option value="fixed" {{ 'selected' if center.shipping_type == 'fixed' }}>ثابت</option>
+                                                    </select>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">درصد ارسال</label>
+                                                    <input type="number" name="shipping_percent" class="form-control" 
+                                                           step="0.1" value="{{ center.shipping_percent }}">
+                                                </div>
+                                                <div class="row">
+                                                    <div class="col-6 mb-3">
+                                                        <label class="form-label">حداقل</label>
+                                                        <input type="number" name="shipping_min" class="form-control" 
+                                                               value="{{ center.shipping_min }}">
+                                                    </div>
+                                                    <div class="col-6 mb-3">
+                                                        <label class="form-label">حداکثر</label>
+                                                        <input type="number" name="shipping_max" class="form-control" 
+                                                               value="{{ center.shipping_max }}">
+                                                    </div>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label">ثابت</label>
+                                                    <input type="number" name="shipping_fixed" class="form-control" 
+                                                           value="{{ center.shipping_fixed }}">
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
+                                                <button type="submit" class="btn btn-primary">ذخیره</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
