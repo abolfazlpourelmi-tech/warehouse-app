@@ -5,12 +5,13 @@
 نسخه Flask
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, Response
 import sqlite3
 import datetime
 import os
 import io
 import json
+import base64
 
 try:
     import jdatetime
@@ -18,6 +19,15 @@ except ImportError:
     print("Installing jdatetime...")
     os.system('pip install jdatetime')
     import jdatetime
+
+try:
+    import barcode
+    from barcode.writer import ImageWriter
+except ImportError:
+    print("Installing python-barcode...")
+    os.system('pip install python-barcode Pillow')
+    import barcode
+    from barcode.writer import ImageWriter
 
 app = Flask(__name__)
 app.secret_key = 'nyto-warehouse-secret-key-2024'
@@ -992,6 +1002,242 @@ def upload_backup():
         flash('دیتابیس بازیابی شد', 'success')
     
     return redirect(url_for('dashboard'))
+
+
+# ==================== بارکد ====================
+def generate_barcode_image(barcode_text):
+    """تولید تصویر بارکد به صورت Base64"""
+    try:
+        # استفاده از Code128 برای انعطاف بیشتر
+        CODE128 = barcode.get_barcode_class('code128')
+        
+        # تولید بارکد
+        buffer = io.BytesIO()
+        code = CODE128(str(barcode_text), writer=ImageWriter())
+        code.write(buffer, options={
+            'module_width': 0.4,
+            'module_height': 15,
+            'font_size': 12,
+            'text_distance': 5,
+            'quiet_zone': 6
+        })
+        buffer.seek(0)
+        
+        # تبدیل به Base64
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return img_base64
+    except Exception as e:
+        print(f"Barcode Error: {e}")
+        return None
+
+@app.route('/barcode/generate/<int:product_id>')
+def generate_barcode(product_id):
+    """تولید بارکد برای یک محصول"""
+    product = db.get_product(product_id)
+    if not product:
+        flash('محصول یافت نشد', 'error')
+        return redirect(url_for('products'))
+    
+    barcode_text = product['barcode'] or f"P{product_id:08d}"
+    barcode_img = generate_barcode_image(barcode_text)
+    
+    return render_template('barcode_view.html', product=product, barcode_img=barcode_img)
+
+@app.route('/barcode/image/<barcode_text>')
+def barcode_image(barcode_text):
+    """دریافت تصویر بارکد به صورت PNG"""
+    try:
+        CODE128 = barcode.get_barcode_class('code128')
+        buffer = io.BytesIO()
+        code = CODE128(str(barcode_text), writer=ImageWriter())
+        code.write(buffer, options={
+            'module_width': 0.4,
+            'module_height': 15,
+            'font_size': 12,
+            'text_distance': 5,
+            'quiet_zone': 6
+        })
+        buffer.seek(0)
+        return Response(buffer.getvalue(), mimetype='image/png')
+    except:
+        return '', 404
+
+@app.route('/barcode/print')
+def print_barcodes():
+    """صفحه چاپ بارکد برای همه محصولات"""
+    products = db.get_products()
+    barcodes = []
+    for product in products:
+        barcode_text = product['barcode'] or f"P{product['id']:08d}"
+        barcodes.append({
+            'product': product,
+            'barcode_text': barcode_text,
+            'barcode_img': generate_barcode_image(barcode_text)
+        })
+    return render_template('barcode_print.html', barcodes=barcodes)
+
+@app.route('/barcode/print/<int:product_id>')
+def print_single_barcode(product_id):
+    """چاپ بارکد تکی"""
+    product = db.get_product(product_id)
+    if not product:
+        flash('محصول یافت نشد', 'error')
+        return redirect(url_for('products'))
+    
+    barcode_text = product['barcode'] or f"P{product_id:08d}"
+    count = request.args.get('count', 1, type=int)
+    
+    barcodes = [{
+        'product': product,
+        'barcode_text': barcode_text,
+        'barcode_img': generate_barcode_image(barcode_text)
+    }] * count
+    
+    return render_template('barcode_print.html', barcodes=barcodes, single=True)
+
+
+# ==================== اسکن بارکد ====================
+@app.route('/scan')
+def scan_menu():
+    """منوی اسکن"""
+    return render_template('scan_menu.html')
+
+@app.route('/scan/inflow')
+def scan_inflow():
+    """صفحه اسکن برای ورودی انبار"""
+    categories = db.get_categories()
+    return render_template('scan_inflow.html', categories=categories)
+
+@app.route('/scan/outflow')
+def scan_outflow():
+    """صفحه اسکن برای خروجی انبار"""
+    centers = db.get_centers()
+    return render_template('scan_outflow.html', centers=centers)
+
+@app.route('/scan/inventory')
+def scan_inventory():
+    """صفحه اسکن برای بررسی موجودی"""
+    return render_template('scan_inventory.html')
+
+
+# ==================== API بارکد ====================
+@app.route('/api/barcode/search/<barcode_text>')
+def api_barcode_search(barcode_text):
+    """جستجوی محصول با بارکد"""
+    # جستجو با بارکد دقیق
+    result = db.execute_query(
+        "SELECT id, name, color, barcode, stock FROM products WHERE barcode = ?",
+        (barcode_text,)
+    )
+    
+    # اگر پیدا نشد، جستجو با الگو
+    if not result:
+        result = db.execute_query(
+            "SELECT id, name, color, barcode, stock FROM products WHERE barcode LIKE ?",
+            (f"%{barcode_text}%",)
+        )
+    
+    if result:
+        product = result[0]
+        # محاسبه FIFO cost
+        cogs, _ = db.calculate_fifo_cost(product['id'], 1)
+        return jsonify({
+            'found': True,
+            'product': {
+                'id': product['id'],
+                'name': product['name'],
+                'color': product['color'] or '',
+                'barcode': product['barcode'],
+                'stock': product['stock'],
+                'cogs': cogs or 0
+            }
+        })
+    
+    return jsonify({'found': False, 'message': 'محصول یافت نشد'})
+
+@app.route('/api/scan/inflow', methods=['POST'])
+def api_scan_inflow():
+    """ثبت ورودی با اسکن"""
+    data = request.json
+    barcode_text = data.get('barcode')
+    quantity = data.get('quantity', 1)
+    buy_price = data.get('buy_price', 0)
+    dollar_rate = data.get('dollar_rate', 0)
+    
+    # پیدا کردن محصول
+    result = db.execute_query(
+        "SELECT id FROM products WHERE barcode = ?",
+        (barcode_text,)
+    )
+    
+    if not result:
+        return jsonify({'success': False, 'message': 'محصول یافت نشد'})
+    
+    product_id = result[0]['id']
+    inflow_date = datetime.date.today().isoformat()
+    
+    db.add_inflow(product_id, quantity, buy_price, inflow_date, dollar_rate)
+    
+    # گرفتن اطلاعات به‌روز شده
+    product = db.get_product(product_id)
+    
+    return jsonify({
+        'success': True,
+        'message': f'{quantity} عدد اضافه شد',
+        'product': {
+            'id': product['id'],
+            'name': product['name'],
+            'stock': product['stock']
+        }
+    })
+
+@app.route('/api/scan/outflow', methods=['POST'])
+def api_scan_outflow():
+    """ثبت خروجی با اسکن"""
+    data = request.json
+    barcode_text = data.get('barcode')
+    quantity = data.get('quantity', 1)
+    sell_price = data.get('sell_price', 0)
+    center_id = data.get('center_id')
+    commission = data.get('commission', 0)
+    shipping = data.get('shipping', 0)
+    order_number = data.get('order_number', '')
+    
+    # پیدا کردن محصول
+    result = db.execute_query(
+        "SELECT id, stock FROM products WHERE barcode = ?",
+        (barcode_text,)
+    )
+    
+    if not result:
+        return jsonify({'success': False, 'message': 'محصول یافت نشد'})
+    
+    product_id = result[0]['id']
+    stock = result[0]['stock']
+    
+    if stock < quantity:
+        return jsonify({'success': False, 'message': f'موجودی کافی نیست ({stock} موجود)'})
+    
+    # محاسبه FIFO
+    cogs_unit, _ = db.calculate_fifo_cost(product_id, quantity)
+    if cogs_unit is None:
+        return jsonify({'success': False, 'message': 'خطا در محاسبه بهای تمام شده'})
+    
+    outflow_date = datetime.date.today().isoformat()
+    db.add_outflow(product_id, center_id, quantity, sell_price, cogs_unit, commission, shipping, outflow_date, order_number)
+    
+    # گرفتن اطلاعات به‌روز شده
+    product = db.get_product(product_id)
+    
+    return jsonify({
+        'success': True,
+        'message': f'{quantity} عدد خارج شد',
+        'product': {
+            'id': product['id'],
+            'name': product['name'],
+            'stock': product['stock']
+        }
+    })
 
 
 if __name__ == '__main__':
