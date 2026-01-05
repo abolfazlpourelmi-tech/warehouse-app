@@ -2,83 +2,28 @@
 # -*- coding: utf-8 -*-
 """
 سیستم جامع مدیریت انبار و حسابداری با روش FIFO
-نسخه کامل Streamlit - با تمام امکانات نسخه دسکتاپ
+نسخه Flask
 """
 
-import streamlit as st
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
 import sqlite3
 import datetime
 import os
 import io
-import pandas as pd
-from decimal import Decimal
+import json
 
 try:
     import jdatetime
 except ImportError:
-    st.error("لطفاً کتابخانه jdatetime را نصب کنید: pip install jdatetime")
-    st.stop()
+    print("Installing jdatetime...")
+    os.system('pip install jdatetime')
+    import jdatetime
 
-# تنظیمات صفحه
-st.set_page_config(
-    page_title="سیستم مدیریت انبار NYTO",
-    page_icon="📦",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+app = Flask(__name__)
+app.secret_key = 'nyto-warehouse-secret-key-2024'
 
-# استایل‌های CSS
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
-    
-    * {
-        font-family: 'Vazirmatn', Tahoma, sans-serif !important;
-    }
-    
-    .main .block-container {
-        padding: 1rem 2rem;
-    }
-    
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 15px;
-        padding: 1rem;
-        color: white;
-        text-align: center;
-        margin: 0.5rem 0;
-    }
-    
-    .metric-card h3 {
-        margin: 0;
-        font-size: 0.9rem;
-        opacity: 0.9;
-    }
-    
-    .metric-card p {
-        margin: 0.5rem 0 0 0;
-        font-size: 1.5rem;
-        font-weight: bold;
-    }
-    
-    .profit-positive { color: #4CAF50 !important; }
-    .profit-negative { color: #F44336 !important; }
-    
-    .debt-table th { background: #4CAF50; color: white; }
-    
-    div[data-testid="stMetricValue"] {
-        font-size: 1.5rem;
-    }
-    
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        padding: 10px 20px;
-    }
-</style>
-""", unsafe_allow_html=True)
+# مسیر دیتابیس
+DB_PATH = os.environ.get('DB_PATH', 'data/warehouse.db')
 
 
 # ==================== توابع کمکی تاریخ ====================
@@ -98,7 +43,7 @@ def gregorian_to_persian(gregorian_str):
 
 def persian_to_gregorian(year, month, day):
     try:
-        jdate = jdatetime.date(year, month, day)
+        jdate = jdatetime.date(int(year), int(month), int(day))
         gdate = jdate.togregorian()
         return gdate.isoformat()
     except:
@@ -108,40 +53,32 @@ def get_persian_months():
     return ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
             "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"]
 
-
-# ==================== تاریخ شمسی ویجت ====================
-def persian_date_input(label, key_prefix, default_date=None):
-    """ویجت انتخاب تاریخ شمسی"""
-    if default_date is None:
-        default_date = get_persian_today()
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        year = st.number_input(f"سال", min_value=1390, max_value=1450, 
-                               value=default_date.year, key=f"{key_prefix}_year")
-    with col2:
-        month = st.selectbox(f"ماه", options=range(1, 13), 
-                            format_func=lambda x: get_persian_months()[x-1],
-                            index=default_date.month-1, key=f"{key_prefix}_month")
-    with col3:
-        max_day = 31 if month <= 6 else (30 if month <= 11 else 29)
-        day = st.number_input(f"روز", min_value=1, max_value=max_day,
-                             value=min(default_date.day, max_day), key=f"{key_prefix}_day")
-    
-    return year, month, day
+def format_number(num):
+    """فرمت عدد با کاما"""
+    try:
+        return f"{int(num):,}"
+    except:
+        return str(num)
 
 
 # ==================== کلاس مدیریت دیتابیس ====================
 class DBManager:
-    def __init__(self, db_path="warehouse.db"):
-        self.db_path = db_path
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        self.cursor = self.conn.cursor()
+    def __init__(self, db_path=None):
+        self.db_path = db_path or DB_PATH
+        os.makedirs(os.path.dirname(self.db_path) if os.path.dirname(self.db_path) else '.', exist_ok=True)
         self.create_tables()
     
+    def get_connection(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
     def create_tables(self):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
         # 1. جدول محصولات
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -152,7 +89,7 @@ class DBManager:
         ''')
         
         # 2. جدول ورودی‌ها
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS inflows (
                 id INTEGER PRIMARY KEY,
                 product_id INTEGER,
@@ -166,7 +103,7 @@ class DBManager:
         ''')
         
         # 3. جدول مراکز فروش
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS sales_centers (
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
@@ -179,7 +116,7 @@ class DBManager:
         ''')
         
         # 4. جدول دسته‌بندی کمیسیون
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS commission_categories (
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
@@ -188,7 +125,7 @@ class DBManager:
         ''')
         
         # 5. جدول کمیسیون‌ها
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS commissions (
                 id INTEGER PRIMARY KEY,
                 center_id INTEGER,
@@ -201,7 +138,7 @@ class DBManager:
         ''')
         
         # 6. جدول ارتباط محصول و دسته‌بندی
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS product_categories (
                 product_id INTEGER,
                 category_id INTEGER,
@@ -212,7 +149,7 @@ class DBManager:
         ''')
         
         # 7. جدول خروجی‌ها
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS outflows (
                 id INTEGER PRIMARY KEY,
                 product_id INTEGER,
@@ -232,7 +169,7 @@ class DBManager:
         ''')
         
         # 8. جدول تسویه حساب‌ها
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS settlements (
                 id INTEGER PRIMARY KEY,
                 center_id INTEGER,
@@ -244,7 +181,7 @@ class DBManager:
         ''')
         
         # 9. جدول تراکنش‌های نقدی
-        self.cursor.execute('''
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS cash_transactions (
                 id INTEGER PRIMARY KEY,
                 transaction_type TEXT NOT NULL,
@@ -255,7 +192,7 @@ class DBManager:
             )
         ''')
         
-        # درج مراکز پیش‌فرض
+        # مراکز پیش‌فرض
         default_centers = [
             ('نایتو', 'manual', 0, 0, 0, 0),
             ('اسنپ شاپ', 'percent', 7, 20000, 150000, 0),
@@ -263,7 +200,7 @@ class DBManager:
         ]
         for center in default_centers:
             try:
-                self.cursor.execute('''
+                cursor.execute('''
                     INSERT OR IGNORE INTO sales_centers 
                     (name, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -271,64 +208,63 @@ class DBManager:
             except:
                 pass
         
-        # ===== Migration برای دیتابیس‌های قدیمی =====
-        # اضافه کردن ستون remaining به inflows
-        try:
-            self.cursor.execute("ALTER TABLE inflows ADD COLUMN remaining REAL DEFAULT 0")
-            # مقداردهی اولیه remaining برابر با quantity
-            self.cursor.execute("UPDATE inflows SET remaining = quantity WHERE remaining = 0 OR remaining IS NULL")
-        except:
-            pass
+        # Migration برای دیتابیس‌های قدیمی
+        migrations = [
+            ("ALTER TABLE inflows ADD COLUMN remaining REAL DEFAULT 0", 
+             "UPDATE inflows SET remaining = quantity WHERE remaining = 0 OR remaining IS NULL"),
+            ("ALTER TABLE inflows ADD COLUMN dollar_rate REAL DEFAULT 0", None),
+            ("ALTER TABLE products ADD COLUMN barcode TEXT DEFAULT ''", None),
+            ("ALTER TABLE outflows ADD COLUMN order_number TEXT DEFAULT ''", None),
+            ("ALTER TABLE outflows ADD COLUMN is_returned INTEGER DEFAULT 0", None),
+            ("ALTER TABLE outflows ADD COLUMN is_paid INTEGER DEFAULT 0", None),
+        ]
         
-        # اضافه کردن ستون dollar_rate به inflows
-        try:
-            self.cursor.execute("ALTER TABLE inflows ADD COLUMN dollar_rate REAL DEFAULT 0")
-        except:
-            pass
+        for alter_query, update_query in migrations:
+            try:
+                cursor.execute(alter_query)
+                if update_query:
+                    cursor.execute(update_query)
+            except:
+                pass
         
-        # اضافه کردن ستون barcode به products
-        try:
-            self.cursor.execute("ALTER TABLE products ADD COLUMN barcode TEXT DEFAULT ''")
-        except:
-            pass
-        
-        # اضافه کردن ستون order_number به outflows
-        try:
-            self.cursor.execute("ALTER TABLE outflows ADD COLUMN order_number TEXT DEFAULT ''")
-        except:
-            pass
-        
-        # اضافه کردن ستون is_returned به outflows
-        try:
-            self.cursor.execute("ALTER TABLE outflows ADD COLUMN is_returned INTEGER DEFAULT 0")
-        except:
-            pass
-        
-        # اضافه کردن ستون is_paid به outflows
-        try:
-            self.cursor.execute("ALTER TABLE outflows ADD COLUMN is_paid INTEGER DEFAULT 0")
-        except:
-            pass
-        
-        self.conn.commit()
+        conn.commit()
+        conn.close()
     
     def execute_query(self, query, params=()):
+        conn = self.get_connection()
+        cursor = conn.cursor()
         try:
-            self.cursor.execute(query, params)
-            self.conn.commit()
-            return self.cursor.fetchall()
+            cursor.execute(query, params)
+            conn.commit()
+            result = cursor.fetchall()
+            return result
         except sqlite3.Error as e:
-            st.error(f"خطای دیتابیس: {e}")
+            print(f"Database Error: {e}")
             return None
+        finally:
+            conn.close()
+    
+    def execute_insert(self, query, params=()):
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(query, params)
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Database Error: {e}")
+            return None
+        finally:
+            conn.close()
     
     # ==================== محصولات ====================
-    def get_products(self, stock_filter="همه", search=""):
+    def get_products(self, stock_filter="all", search=""):
         query = "SELECT id, name, color, barcode, stock FROM products WHERE 1=1"
         params = []
         
-        if stock_filter == "موجود":
+        if stock_filter == "available":
             query += " AND stock > 0"
-        elif stock_filter == "ناموجود":
+        elif stock_filter == "unavailable":
             query += " AND stock <= 0"
         
         if search:
@@ -338,14 +274,16 @@ class DBManager:
         query += " ORDER BY name"
         return self.execute_query(query, params)
     
+    def get_product(self, product_id):
+        result = self.execute_query("SELECT * FROM products WHERE id = ?", (product_id,))
+        return result[0] if result else None
+    
     def add_product(self, name, color="", barcode=""):
-        self.execute_query(
+        product_id = self.execute_insert(
             "INSERT INTO products (name, color, barcode, stock) VALUES (?, ?, ?, 0)",
             (name, color, barcode)
         )
-        product_id = self.cursor.lastrowid
-        # تولید بارکد خودکار
-        if not barcode:
+        if not barcode and product_id:
             auto_barcode = f"200{product_id:010d}"
             self.execute_query("UPDATE products SET barcode = ? WHERE id = ?", (auto_barcode, product_id))
         return product_id
@@ -357,19 +295,18 @@ class DBManager:
         )
     
     def delete_product(self, product_id):
-        # بررسی وابستگی‌ها
-        inflows = self.execute_query("SELECT COUNT(*) FROM inflows WHERE product_id = ?", (product_id,))
-        outflows = self.execute_query("SELECT COUNT(*) FROM outflows WHERE product_id = ?", (product_id,))
+        inflows = self.execute_query("SELECT COUNT(*) as cnt FROM inflows WHERE product_id = ?", (product_id,))
+        outflows = self.execute_query("SELECT COUNT(*) as cnt FROM outflows WHERE product_id = ?", (product_id,))
         
-        if (inflows and inflows[0][0] > 0) or (outflows and outflows[0][0] > 0):
-            return False, "این کالا دارای ورودی یا خروجی است و قابل حذف نیست."
+        if (inflows and inflows[0]['cnt'] > 0) or (outflows and outflows[0]['cnt'] > 0):
+            return False, "این کالا دارای ورودی یا خروجی است"
         
         self.execute_query("DELETE FROM products WHERE id=?", (product_id,))
-        return True, "کالا حذف شد."
+        return True, "کالا حذف شد"
     
     # ==================== ورودی‌ها ====================
-    def add_inflow(self, product_id, quantity, buy_price, inflow_date, dollar_rate=0, category_id=None):
-        self.execute_query(
+    def add_inflow(self, product_id, quantity, buy_price, inflow_date, dollar_rate=0):
+        self.execute_insert(
             "INSERT INTO inflows (product_id, quantity, remaining, buy_price, inflow_date, dollar_rate) VALUES (?, ?, ?, ?, ?, ?)",
             (product_id, quantity, quantity, buy_price, inflow_date, dollar_rate)
         )
@@ -377,15 +314,11 @@ class DBManager:
             "UPDATE products SET stock = stock + ? WHERE id = ?",
             (quantity, product_id)
         )
-        if category_id and category_id > 0:
-            self.execute_query(
-                "INSERT OR REPLACE INTO product_categories (product_id, category_id) VALUES (?, ?)",
-                (product_id, category_id)
-            )
     
     def get_inflows(self, start_date=None, end_date=None, product_id=None):
         query = """
-            SELECT i.id, i.product_id, p.name, p.color, i.quantity, i.buy_price, i.inflow_date, i.remaining, i.dollar_rate
+            SELECT i.id, i.product_id, p.name, p.color, i.quantity, i.buy_price, 
+                   i.inflow_date, i.remaining, i.dollar_rate
             FROM inflows i 
             JOIN products p ON i.product_id = p.id
             WHERE 1=1
@@ -397,44 +330,25 @@ class DBManager:
         if end_date:
             query += " AND i.inflow_date <= ?"
             params.append(end_date)
-        if product_id and product_id > 0:
+        if product_id:
             query += " AND i.product_id = ?"
             params.append(product_id)
         query += " ORDER BY i.inflow_date DESC"
         return self.execute_query(query, params)
     
-    def update_inflow(self, inflow_id, product_id, quantity, buy_price, inflow_date, dollar_rate):
-        # گرفتن اطلاعات قبلی
-        old = self.execute_query("SELECT product_id, quantity FROM inflows WHERE id = ?", (inflow_id,))
-        if old:
-            old_product_id, old_qty = old[0]
-            # برگرداندن موجودی قدیمی
-            self.execute_query("UPDATE products SET stock = stock - ? WHERE id = ?", (old_qty, old_product_id))
-        
-        # به‌روزرسانی ورودی
-        self.execute_query(
-            "UPDATE inflows SET product_id=?, quantity=?, remaining=?, buy_price=?, inflow_date=?, dollar_rate=? WHERE id=?",
-            (product_id, quantity, quantity, buy_price, inflow_date, dollar_rate, inflow_id)
-        )
-        # اضافه کردن موجودی جدید
-        self.execute_query("UPDATE products SET stock = stock + ? WHERE id = ?", (quantity, product_id))
-    
     def delete_inflow(self, inflow_id):
-        # گرفتن اطلاعات
         inflow = self.execute_query("SELECT product_id, quantity, remaining FROM inflows WHERE id = ?", (inflow_id,))
         if not inflow:
-            return False, "ورودی یافت نشد."
+            return False, "ورودی یافت نشد"
         
-        product_id, quantity, remaining = inflow[0]
+        product_id, quantity, remaining = inflow[0]['product_id'], inflow[0]['quantity'], inflow[0]['remaining']
         
-        # بررسی اینکه آیا از این ورودی استفاده شده
         if remaining < quantity:
-            return False, "از این ورودی در خروجی‌ها استفاده شده و قابل حذف نیست."
+            return False, "از این ورودی استفاده شده"
         
-        # حذف و برگرداندن موجودی
         self.execute_query("DELETE FROM inflows WHERE id = ?", (inflow_id,))
         self.execute_query("UPDATE products SET stock = stock - ? WHERE id = ?", (quantity, product_id))
-        return True, "ورودی حذف شد."
+        return True, "ورودی حذف شد"
     
     # ==================== خروجی‌ها ====================
     def calculate_fifo_cost(self, product_id, quantity):
@@ -450,58 +364,20 @@ class DBManager:
         remaining_qty = quantity
         used_inflows = []
         
-        for inflow_id, remaining, price in inflows:
+        for row in inflows:
             if remaining_qty <= 0:
                 break
-            use_qty = min(remaining, remaining_qty)
-            total_cost += use_qty * price
+            use_qty = min(row['remaining'], remaining_qty)
+            total_cost += use_qty * row['buy_price']
             remaining_qty -= use_qty
-            used_inflows.append((inflow_id, use_qty))
+            used_inflows.append((row['id'], use_qty))
         
         if remaining_qty > 0:
             return None, []
         
         return total_cost / quantity, used_inflows
     
-    def calculate_shipping_cost(self, center_id, sell_price, quantity):
-        center = self.execute_query(
-            "SELECT shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed FROM sales_centers WHERE id = ?",
-            (center_id,)
-        )
-        if not center:
-            return 0
-        
-        ship_type, ship_percent, ship_min, ship_max, ship_fixed = center[0]
-        
-        if ship_type == 'manual':
-            return 0
-        elif ship_type == 'fixed':
-            return ship_fixed
-        elif ship_type == 'percent':
-            total = sell_price * quantity
-            shipping = total * (ship_percent / 100)
-            shipping = max(shipping, ship_min)
-            if ship_max > 0:
-                shipping = min(shipping, ship_max)
-            return shipping
-        return 0
-    
-    def get_product_commission(self, center_id, product_id):
-        # گرفتن دسته‌بندی محصول
-        cat = self.execute_query("SELECT category_id FROM product_categories WHERE product_id = ?", (product_id,))
-        if not cat:
-            return 0
-        category_id = cat[0][0]
-        
-        # گرفتن کمیسیون
-        comm = self.execute_query(
-            "SELECT commission_percent FROM commissions WHERE center_id = ? AND category_id = ?",
-            (center_id, category_id)
-        )
-        return comm[0][0] if comm else 0
-    
     def add_outflow(self, product_id, center_id, quantity, sell_price, cogs_unit, commission, shipping, outflow_date, order_number=""):
-        # کسر از FIFO
         _, used_inflows = self.calculate_fifo_cost(product_id, quantity)
         
         for inflow_id, use_qty in used_inflows:
@@ -510,23 +386,21 @@ class DBManager:
                 (use_qty, inflow_id)
             )
         
-        # ثبت خروجی
-        self.execute_query(
+        self.execute_insert(
             """INSERT INTO outflows 
                (product_id, center_id, quantity, sell_price, cogs_unit, commission_amount, shipping_cost, outflow_date, order_number)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (product_id, center_id, quantity, sell_price, cogs_unit, commission, shipping, outflow_date, order_number)
         )
         
-        # به‌روزرسانی موجودی
         self.execute_query(
             "UPDATE products SET stock = stock - ? WHERE id = ?",
             (quantity, product_id)
         )
     
-    def get_outflows(self, start_date=None, end_date=None, product_id=None, center_id=None, is_returned=None, is_paid=None):
+    def get_outflows(self, start_date=None, end_date=None, center_id=None, is_returned=None, is_paid=None):
         query = """
-            SELECT o.id, o.product_id, p.name, p.color, sc.name, o.quantity, o.sell_price, o.cogs_unit, 
+            SELECT o.id, o.product_id, p.name, p.color, sc.name as center_name, o.quantity, o.sell_price, o.cogs_unit, 
                    o.commission_amount, o.shipping_cost, o.outflow_date, o.order_number, o.is_returned, o.is_paid, o.center_id
             FROM outflows o
             JOIN products p ON o.product_id = p.id
@@ -540,10 +414,7 @@ class DBManager:
         if end_date:
             query += " AND o.outflow_date <= ?"
             params.append(end_date)
-        if product_id and product_id > 0:
-            query += " AND o.product_id = ?"
-            params.append(product_id)
-        if center_id and center_id > 0:
+        if center_id:
             query += " AND o.center_id = ?"
             params.append(center_id)
         if is_returned is not None:
@@ -558,35 +429,33 @@ class DBManager:
     def toggle_outflow_return(self, outflow_id):
         outflow = self.execute_query("SELECT is_returned, product_id, quantity FROM outflows WHERE id = ?", (outflow_id,))
         if outflow:
-            is_returned, product_id, quantity = outflow[0]
+            is_returned = outflow[0]['is_returned']
+            product_id = outflow[0]['product_id']
+            quantity = outflow[0]['quantity']
             new_status = 0 if is_returned else 1
             self.execute_query("UPDATE outflows SET is_returned = ? WHERE id = ?", (new_status, outflow_id))
-            # برگرداندن یا کسر موجودی
-            if new_status == 1:  # برگشت خورد
+            if new_status == 1:
                 self.execute_query("UPDATE products SET stock = stock + ? WHERE id = ?", (quantity, product_id))
-            else:  # برگشت لغو شد
+            else:
                 self.execute_query("UPDATE products SET stock = stock - ? WHERE id = ?", (quantity, product_id))
     
     def toggle_outflow_paid(self, outflow_id):
         outflow = self.execute_query("SELECT is_paid FROM outflows WHERE id = ?", (outflow_id,))
         if outflow:
-            is_paid = outflow[0][0]
-            new_status = 0 if is_paid else 1
+            new_status = 0 if outflow[0]['is_paid'] else 1
             self.execute_query("UPDATE outflows SET is_paid = ? WHERE id = ?", (new_status, outflow_id))
     
     def delete_outflow(self, outflow_id):
         outflow = self.execute_query("SELECT product_id, quantity, is_returned FROM outflows WHERE id = ?", (outflow_id,))
         if not outflow:
-            return False, "خروجی یافت نشد."
+            return False, "خروجی یافت نشد"
         
-        product_id, quantity, is_returned = outflow[0]
-        
-        # برگرداندن موجودی (اگر برگشتی نبوده)
-        if not is_returned:
-            self.execute_query("UPDATE products SET stock = stock + ? WHERE id = ?", (quantity, product_id))
+        if not outflow[0]['is_returned']:
+            self.execute_query("UPDATE products SET stock = stock + ? WHERE id = ?", 
+                             (outflow[0]['quantity'], outflow[0]['product_id']))
         
         self.execute_query("DELETE FROM outflows WHERE id = ?", (outflow_id,))
-        return True, "خروجی حذف شد."
+        return True, "خروجی حذف شد"
     
     # ==================== مراکز فروش ====================
     def get_centers(self):
@@ -594,8 +463,12 @@ class DBManager:
             "SELECT id, name, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed FROM sales_centers ORDER BY name"
         )
     
+    def get_center(self, center_id):
+        result = self.execute_query("SELECT * FROM sales_centers WHERE id = ?", (center_id,))
+        return result[0] if result else None
+    
     def add_center(self, name, shipping_type='manual', shipping_percent=0, shipping_min=0, shipping_max=0, shipping_fixed=0):
-        self.execute_query(
+        self.execute_insert(
             "INSERT INTO sales_centers (name, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed) VALUES (?, ?, ?, ?, ?, ?)",
             (name, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed)
         )
@@ -611,14 +484,14 @@ class DBManager:
         return self.execute_query("SELECT id, name, description FROM commission_categories ORDER BY name")
     
     def add_category(self, name, description=""):
-        self.execute_query(
+        self.execute_insert(
             "INSERT INTO commission_categories (name, description) VALUES (?, ?)",
             (name, description)
         )
     
     def get_commissions(self):
         return self.execute_query("""
-            SELECT c.id, sc.name, cc.name, c.commission_percent, c.center_id, c.category_id
+            SELECT c.id, sc.name as center_name, cc.name as category_name, c.commission_percent, c.center_id, c.category_id
             FROM commissions c
             JOIN sales_centers sc ON c.center_id = sc.id
             JOIN commission_categories cc ON c.category_id = cc.id
@@ -631,12 +504,15 @@ class DBManager:
             (center_id, category_id, percent)
         )
     
-    def get_product_category(self, product_id):
-        result = self.execute_query(
-            "SELECT category_id FROM product_categories WHERE product_id = ?",
-            (product_id,)
+    def get_product_commission(self, center_id, product_id):
+        cat = self.execute_query("SELECT category_id FROM product_categories WHERE product_id = ?", (product_id,))
+        if not cat:
+            return 0
+        comm = self.execute_query(
+            "SELECT commission_percent FROM commissions WHERE center_id = ? AND category_id = ?",
+            (center_id, cat[0]['category_id'])
         )
-        return result[0][0] if result else None
+        return comm[0]['commission_percent'] if comm else 0
     
     def set_product_category(self, product_id, category_id):
         self.execute_query(
@@ -646,21 +522,21 @@ class DBManager:
     
     # ==================== تسویه ====================
     def add_settlement(self, center_id, amount, settlement_date, description=""):
-        self.execute_query(
+        self.execute_insert(
             "INSERT INTO settlements (center_id, amount, settlement_date, description) VALUES (?, ?, ?, ?)",
             (center_id, amount, settlement_date, description)
         )
     
     def get_settlements(self, center_id=None):
-        if center_id and center_id > 0:
+        if center_id:
             return self.execute_query("""
-                SELECT s.id, sc.name, s.amount, s.settlement_date, s.description
+                SELECT s.id, sc.name as center_name, s.amount, s.settlement_date, s.description
                 FROM settlements s JOIN sales_centers sc ON s.center_id = sc.id
                 WHERE s.center_id = ?
                 ORDER BY s.settlement_date DESC
             """, (center_id,))
         return self.execute_query("""
-            SELECT s.id, sc.name, s.amount, s.settlement_date, s.description
+            SELECT s.id, sc.name as center_name, s.amount, s.settlement_date, s.description
             FROM settlements s JOIN sales_centers sc ON s.center_id = sc.id
             ORDER BY s.settlement_date DESC
         """)
@@ -670,7 +546,7 @@ class DBManager:
     
     # ==================== حساب نقدی ====================
     def add_cash_transaction(self, trans_type, amount, source, description, trans_date):
-        self.execute_query(
+        self.execute_insert(
             "INSERT INTO cash_transactions (transaction_type, amount, source, description, transaction_date) VALUES (?, ?, ?, ?, ?)",
             (trans_type, amount, source, description, trans_date)
         )
@@ -689,47 +565,42 @@ class DBManager:
         self.execute_query("DELETE FROM cash_transactions WHERE id = ?", (trans_id,))
     
     def get_cash_summary(self):
-        deposits = self.execute_query("SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE transaction_type = 'deposit'")
-        withdraws = self.execute_query("SELECT COALESCE(SUM(amount), 0) FROM cash_transactions WHERE transaction_type = 'withdraw'")
-        total_deposits = deposits[0][0] if deposits else 0
-        total_withdraws = withdraws[0][0] if withdraws else 0
+        deposits = self.execute_query("SELECT COALESCE(SUM(amount), 0) as total FROM cash_transactions WHERE transaction_type = 'deposit'")
+        withdraws = self.execute_query("SELECT COALESCE(SUM(amount), 0) as total FROM cash_transactions WHERE transaction_type = 'withdraw'")
+        total_deposits = deposits[0]['total'] if deposits else 0
+        total_withdraws = withdraws[0]['total'] if withdraws else 0
         return total_deposits, total_withdraws, total_deposits - total_withdraws
     
     # ==================== داشبورد ====================
     def get_dashboard_stats(self):
         stats = {}
         
-        # آمار فروش
         result = self.execute_query("""
             SELECT 
-                COALESCE(SUM(quantity * sell_price), 0),
-                COALESCE(SUM(quantity * cogs_unit), 0),
-                COALESCE(SUM(commission_amount), 0),
-                COALESCE(SUM(shipping_cost), 0)
+                COALESCE(SUM(quantity * sell_price), 0) as revenue,
+                COALESCE(SUM(quantity * cogs_unit), 0) as cogs,
+                COALESCE(SUM(commission_amount), 0) as commission,
+                COALESCE(SUM(shipping_cost), 0) as shipping
             FROM outflows WHERE is_returned = 0
         """)
-        if result and result[0]:
-            stats['revenue'] = result[0][0]
-            stats['cogs'] = result[0][1]
-            stats['commission'] = result[0][2]
-            stats['shipping'] = result[0][3]
+        if result:
+            stats['revenue'] = result[0]['revenue']
+            stats['cogs'] = result[0]['cogs']
+            stats['commission'] = result[0]['commission']
+            stats['shipping'] = result[0]['shipping']
             stats['profit'] = stats['revenue'] - stats['cogs'] - stats['commission'] - stats['shipping']
         else:
             stats['revenue'] = stats['cogs'] = stats['commission'] = stats['shipping'] = stats['profit'] = 0
         
-        # موجودی
-        result = self.execute_query("SELECT COALESCE(SUM(stock), 0) FROM products")
-        stats['total_stock'] = result[0][0] if result else 0
+        result = self.execute_query("SELECT COALESCE(SUM(stock), 0) as total FROM products")
+        stats['total_stock'] = result[0]['total'] if result else 0
         
-        # ارزش موجودی
-        result = self.execute_query("SELECT COALESCE(SUM(remaining * buy_price), 0) FROM inflows WHERE remaining > 0")
-        stats['inventory_value'] = result[0][0] if result else 0
+        result = self.execute_query("SELECT COALESCE(SUM(remaining * buy_price), 0) as total FROM inflows WHERE remaining > 0")
+        stats['inventory_value'] = result[0]['total'] if result else 0
         
-        # تسویه شده
-        result = self.execute_query("SELECT COALESCE(SUM(amount), 0) FROM settlements")
-        stats['total_settled'] = result[0][0] if result else 0
+        result = self.execute_query("SELECT COALESCE(SUM(amount), 0) as total FROM settlements")
+        stats['total_settled'] = result[0]['total'] if result else 0
         
-        # موجودی نقدی
         deposits, withdraws, balance = self.get_cash_summary()
         stats['cash_deposits'] = deposits
         stats['cash_withdraws'] = withdraws
@@ -738,7 +609,6 @@ class DBManager:
         return stats
     
     def get_center_debts(self):
-        """محاسبه بدهی هر مرکز فروش"""
         return self.execute_query("""
             SELECT 
                 sc.id,
@@ -751,872 +621,378 @@ class DBManager:
             LEFT JOIN outflows o ON sc.id = o.center_id AND o.is_paid = 0
             GROUP BY sc.id
         """)
-    
-    def get_database_bytes(self):
-        self.conn.commit()
-        with open(self.db_path, 'rb') as f:
-            return f.read()
 
 
-# ==================== راه‌اندازی ====================
-@st.cache_resource
-def get_database():
-    return DBManager()
-
-db = get_database()
+# ایجاد instance دیتابیس
+db = DBManager()
 
 
-# ==================== سایدبار ====================
-with st.sidebar:
-    st.markdown("## 📦 سیستم انبارداری")
-    st.markdown(f"📅 {get_persian_today().strftime('%Y/%m/%d')}")
-    st.markdown("---")
-    
-    menu = st.radio(
-        "منو",
-        ["🏠 داشبورد", "📦 مدیریت کالا", "📥 ورودی انبار", "📤 خروجی انبار",
-         "🏪 مراکز فروش", "💰 کمیسیون‌ها", "💵 تسویه حساب", "🏦 حساب نقدی",
-         "💲 قیمت‌گذاری", "📊 گزارشات", "⚙️ مدیریت داده"],
-        label_visibility="collapsed"
-    )
-    
-    st.markdown("---")
-    st.markdown("### 💾 بکاپ دیتابیس")
-    
-    db_bytes = db.get_database_bytes()
-    st.download_button(
-        label="📥 دانلود",
-        data=db_bytes,
-        file_name=f"warehouse_{jdatetime.date.today().strftime('%Y%m%d')}.db",
-        mime="application/octet-stream"
-    )
-    
-    uploaded_db = st.file_uploader("📤 بازیابی", type=['db'], label_visibility="collapsed")
-    if uploaded_db:
-        if st.button("⚠️ بازیابی دیتابیس"):
-            with open("warehouse.db", "wb") as f:
-                f.write(uploaded_db.read())
-            st.cache_resource.clear()
-            st.rerun()
+# ==================== Context Processors ====================
+@app.context_processor
+def utility_processor():
+    return {
+        'format_number': format_number,
+        'gregorian_to_persian': gregorian_to_persian,
+        'persian_months': get_persian_months(),
+        'today': get_persian_today()
+    }
 
 
-# ==================== داشبورد ====================
-if menu == "🏠 داشبورد":
-    st.markdown("# 🏠 داشبورد")
-    
+# ==================== روت‌های اصلی ====================
+@app.route('/')
+def dashboard():
     stats = db.get_dashboard_stats()
-    
-    # ردیف اول - آمار فروش
-    st.markdown("### 📊 خلاصه مالی")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("💰 درآمد کل فروش", f"{stats['revenue']:,.0f} تومان")
-    with col2:
-        st.metric("📦 بهای تمام شده", f"{stats['cogs']:,.0f} تومان")
-    with col3:
-        st.metric("💳 کمیسیون‌ها", f"{stats['commission']:,.0f} تومان")
-    with col4:
-        profit_delta = "مثبت" if stats['profit'] >= 0 else "منفی"
-        st.metric("📈 سود خالص", f"{stats['profit']:,.0f} تومان", delta=profit_delta)
-    
-    # ردیف دوم - موجودی
-    st.markdown("### 🏪 وضعیت انبار و حساب")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("📦 موجودی انبار", f"{stats['total_stock']:,.0f} واحد")
-    with col2:
-        st.metric("💎 ارزش موجودی", f"{stats['inventory_value']:,.0f} تومان")
-    with col3:
-        st.metric("✅ تسویه شده", f"{stats['total_settled']:,.0f} تومان")
-    with col4:
-        st.metric("🏦 موجودی نقدی", f"{stats['cash_balance']:,.0f} تومان")
-    
-    # جدول بدهی مراکز
-    st.markdown("### 💳 بدهی مراکز فروش")
     debts = db.get_center_debts()
-    if debts:
-        debt_data = []
-        for cid, name, sales, comm, ship, settled in debts:
-            receivable = sales - comm - ship
-            debt = receivable - settled
-            debt_data.append({
-                'مرکز فروش': name,
-                'کل فروش': f"{sales:,.0f}",
-                'کمیسیون+ارسال': f"{comm + ship:,.0f}",
-                'قابل دریافت': f"{receivable:,.0f}",
-                'تسویه شده': f"{settled:,.0f}",
-                'بدهی': f"{debt:,.0f}"
-            })
-        st.dataframe(pd.DataFrame(debt_data), use_container_width=True, hide_index=True)
+    return render_template('dashboard.html', stats=stats, debts=debts)
 
 
-# ==================== مدیریت کالا ====================
-elif menu == "📦 مدیریت کالا":
-    st.markdown("# 📦 مدیریت کالا")
+# ==================== محصولات ====================
+@app.route('/products')
+def products():
+    stock_filter = request.args.get('filter', 'all')
+    search = request.args.get('search', '')
+    products_list = db.get_products(stock_filter, search)
+    return render_template('products.html', products=products_list, filter=stock_filter, search=search)
+
+@app.route('/products/add', methods=['POST'])
+def add_product():
+    name = request.form.get('name', '').strip()
+    color = request.form.get('color', '').strip()
+    barcode = request.form.get('barcode', '').strip()
     
-    tab1, tab2, tab3 = st.tabs(["➕ افزودن", "📋 لیست کالاها", "✏️ ویرایش/حذف"])
+    if name:
+        db.add_product(name, color, barcode)
+        flash('کالا با موفقیت اضافه شد', 'success')
+    else:
+        flash('نام کالا الزامی است', 'error')
     
-    with tab1:
-        with st.form("add_product"):
-            col1, col2 = st.columns(2)
-            with col1:
-                name = st.text_input("نام کالا *")
-            with col2:
-                color = st.text_input("رنگ / مدل")
-            barcode = st.text_input("بارکد (خالی = خودکار)")
-            
-            if st.form_submit_button("➕ افزودن کالا", type="primary"):
-                if name:
-                    db.add_product(name, color, barcode)
-                    st.success("✅ کالا اضافه شد!")
-                    st.rerun()
-                else:
-                    st.error("نام کالا الزامی است!")
+    return redirect(url_for('products'))
+
+@app.route('/products/edit/<int:product_id>', methods=['POST'])
+def edit_product(product_id):
+    name = request.form.get('name', '').strip()
+    color = request.form.get('color', '').strip()
+    barcode = request.form.get('barcode', '').strip()
     
-    with tab2:
-        col1, col2 = st.columns(2)
-        with col1:
-            stock_filter = st.selectbox("فیلتر موجودی", ["همه", "موجود", "ناموجود"])
-        with col2:
-            search = st.text_input("🔍 جستجو")
-        
-        products = db.get_products(stock_filter, search)
-        if products:
-            df = pd.DataFrame(products, columns=['ID', 'نام', 'رنگ', 'بارکد', 'موجودی'])
-            st.dataframe(df, use_container_width=True, hide_index=True)
+    if name:
+        db.update_product(product_id, name, color, barcode)
+        flash('کالا ویرایش شد', 'success')
+    
+    return redirect(url_for('products'))
+
+@app.route('/products/delete/<int:product_id>', methods=['POST'])
+def delete_product(product_id):
+    success, msg = db.delete_product(product_id)
+    flash(msg, 'success' if success else 'error')
+    return redirect(url_for('products'))
+
+
+# ==================== ورودی‌ها ====================
+@app.route('/inflows')
+def inflows():
+    products_list = db.get_products()
+    categories = db.get_categories()
+    inflows_list = db.get_inflows()
+    return render_template('inflows.html', products=products_list, categories=categories, inflows=inflows_list)
+
+@app.route('/inflows/add', methods=['POST'])
+def add_inflow():
+    product_id = request.form.get('product_id', type=int)
+    quantity = request.form.get('quantity', type=float)
+    buy_price = request.form.get('buy_price', type=float)
+    dollar_rate = request.form.get('dollar_rate', 0, type=float)
+    year = request.form.get('year', type=int)
+    month = request.form.get('month', type=int)
+    day = request.form.get('day', type=int)
+    
+    if product_id and quantity and buy_price:
+        inflow_date = persian_to_gregorian(year, month, day)
+        db.add_inflow(product_id, quantity, buy_price, inflow_date, dollar_rate)
+        flash('ورودی ثبت شد', 'success')
+    else:
+        flash('اطلاعات ناقص است', 'error')
+    
+    return redirect(url_for('inflows'))
+
+@app.route('/inflows/delete/<int:inflow_id>', methods=['POST'])
+def delete_inflow(inflow_id):
+    success, msg = db.delete_inflow(inflow_id)
+    flash(msg, 'success' if success else 'error')
+    return redirect(url_for('inflows'))
+
+
+# ==================== خروجی‌ها ====================
+@app.route('/outflows')
+def outflows():
+    products_list = db.get_products(stock_filter="available")
+    centers = db.get_centers()
+    outflows_list = db.get_outflows()
+    return render_template('outflows.html', products=products_list, centers=centers, outflows=outflows_list)
+
+@app.route('/outflows/add', methods=['POST'])
+def add_outflow():
+    product_id = request.form.get('product_id', type=int)
+    center_id = request.form.get('center_id', type=int)
+    quantity = request.form.get('quantity', type=float)
+    sell_price = request.form.get('sell_price', type=float)
+    commission = request.form.get('commission', 0, type=float)
+    shipping = request.form.get('shipping', 0, type=float)
+    order_number = request.form.get('order_number', '').strip()
+    year = request.form.get('year', type=int)
+    month = request.form.get('month', type=int)
+    day = request.form.get('day', type=int)
+    
+    if product_id and center_id and quantity and sell_price:
+        cogs_unit, _ = db.calculate_fifo_cost(product_id, quantity)
+        if cogs_unit is not None:
+            outflow_date = persian_to_gregorian(year, month, day)
+            db.add_outflow(product_id, center_id, quantity, sell_price, cogs_unit, commission, shipping, outflow_date, order_number)
+            flash('خروجی ثبت شد', 'success')
         else:
-            st.info("کالایی یافت نشد.")
+            flash('موجودی کافی نیست', 'error')
+    else:
+        flash('اطلاعات ناقص است', 'error')
     
-    with tab3:
-        products = db.get_products()
-        if products:
-            selected_id = st.selectbox(
-                "انتخاب کالا",
-                options=[p[0] for p in products],
-                format_func=lambda x: next((f"[{p[0]}] {p[1]} - {p[2]}" for p in products if p[0] == x), str(x))
-            )
-            
-            product = next((p for p in products if p[0] == selected_id), None)
-            if product:
-                with st.form("edit_product"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        edit_name = st.text_input("نام", value=product[1])
-                    with col2:
-                        edit_color = st.text_input("رنگ", value=product[2] or "")
-                    edit_barcode = st.text_input("بارکد", value=product[3] or "")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.form_submit_button("💾 ذخیره", type="primary"):
-                            db.update_product(selected_id, edit_name, edit_color, edit_barcode)
-                            st.success("✅ ذخیره شد!")
-                            st.rerun()
-                    with col2:
-                        if st.form_submit_button("🗑️ حذف", type="secondary"):
-                            success, msg = db.delete_product(selected_id)
-                            if success:
-                                st.success(msg)
-                                st.rerun()
-                            else:
-                                st.error(msg)
+    return redirect(url_for('outflows'))
 
+@app.route('/outflows/toggle_return/<int:outflow_id>', methods=['POST'])
+def toggle_return(outflow_id):
+    db.toggle_outflow_return(outflow_id)
+    flash('وضعیت برگشت تغییر کرد', 'success')
+    return redirect(url_for('outflows'))
 
-# ==================== ورودی انبار ====================
-elif menu == "📥 ورودی انبار":
-    st.markdown("# 📥 ورودی انبار")
-    
-    tab1, tab2, tab3 = st.tabs(["➕ ثبت ورودی", "📋 تاریخچه", "✏️ ویرایش/حذف"])
-    
-    with tab1:
-        products = db.get_products()
-        categories = db.get_categories()
-        
-        if not products:
-            st.warning("ابتدا کالا ثبت کنید!")
-        else:
-            with st.form("add_inflow"):
-                product_id = st.selectbox(
-                    "انتخاب کالا *",
-                    options=[p[0] for p in products],
-                    format_func=lambda x: next((f"[{p[0]}] {p[1]} - {p[2]}" for p in products if p[0] == x), str(x))
-                )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    quantity = st.number_input("تعداد *", min_value=0.01, value=1.0, step=1.0)
-                with col2:
-                    buy_price = st.number_input("قیمت خرید (تومان) *", min_value=0, value=0, step=1000)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    dollar_rate = st.number_input("نرخ دلار (تومان)", min_value=0, value=0, step=1000)
-                with col2:
-                    if categories:
-                        category_options = [(-1, "بدون دسته‌بندی")] + [(c[0], c[1]) for c in categories]
-                        category_id = st.selectbox(
-                            "دسته‌بندی کمیسیون",
-                            options=[c[0] for c in category_options],
-                            format_func=lambda x: next((c[1] for c in category_options if c[0] == x), str(x))
-                        )
-                    else:
-                        category_id = -1
-                
-                st.markdown("**تاریخ ورودی:**")
-                year, month, day = persian_date_input("تاریخ", "inflow")
-                
-                if st.form_submit_button("➕ ثبت ورودی", type="primary"):
-                    if product_id and quantity > 0 and buy_price > 0:
-                        inflow_date = persian_to_gregorian(year, month, day)
-                        db.add_inflow(product_id, quantity, buy_price, inflow_date, dollar_rate, category_id)
-                        st.success("✅ ورودی ثبت شد!")
-                        st.rerun()
-                    else:
-                        st.error("فیلدهای ضروری را پر کنید!")
-    
-    with tab2:
-        st.markdown("**فیلتر تاریخ:**")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("از تاریخ:")
-            today = get_persian_today()
-            try:
-                one_year_ago = jdatetime.date(today.year - 1, today.month, today.day)
-            except:
-                one_year_ago = jdatetime.date(today.year - 1, today.month, 1)
-            start_y, start_m, start_d = persian_date_input("از", "inf_start", one_year_ago)
-        with col2:
-            st.markdown("تا تاریخ:")
-            end_y, end_m, end_d = persian_date_input("تا", "inf_end", today)
-        
-        start_date = persian_to_gregorian(start_y, start_m, start_d)
-        end_date = persian_to_gregorian(end_y, end_m, end_d)
-        
-        inflows = db.get_inflows(start_date, end_date)
-        if inflows:
-            data = []
-            total = 0
-            for i in inflows:
-                amount = i[4] * i[5]
-                total += amount
-                data.append({
-                    'ID': i[0],
-                    'کد کالا': i[1],
-                    'نام کالا': i[2],
-                    'رنگ': i[3] or '-',
-                    'تعداد': i[4],
-                    'قیمت خرید': f"{i[5]:,.0f}",
-                    'مبلغ کل': f"{amount:,.0f}",
-                    'تاریخ': gregorian_to_persian(i[6]),
-                    'باقیمانده': i[7],
-                    'نرخ دلار': f"{i[8]:,.0f}" if i[8] else '-'
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
-            st.info(f"📊 جمع کل: {total:,.0f} تومان | تعداد ردیف: {len(data)}")
-        else:
-            st.info("ورودی یافت نشد.")
-    
-    with tab3:
-        inflows = db.get_inflows()
-        if inflows:
-            selected_inflow = st.selectbox(
-                "انتخاب ورودی",
-                options=[i[0] for i in inflows],
-                format_func=lambda x: next((f"[{i[0]}] {i[2]} - {gregorian_to_persian(i[6])} - {i[4]} عدد" for i in inflows if i[0] == x), str(x))
-            )
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🗑️ حذف ورودی", type="secondary"):
-                    success, msg = db.delete_inflow(selected_inflow)
-                    if success:
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
+@app.route('/outflows/toggle_paid/<int:outflow_id>', methods=['POST'])
+def toggle_paid(outflow_id):
+    db.toggle_outflow_paid(outflow_id)
+    flash('وضعیت پرداخت تغییر کرد', 'success')
+    return redirect(url_for('outflows'))
 
-
-# ==================== خروجی انبار ====================
-elif menu == "📤 خروجی انبار":
-    st.markdown("# 📤 خروجی انبار")
-    
-    tab1, tab2, tab3 = st.tabs(["➕ ثبت خروجی", "📋 تاریخچه", "🔄 تغییر وضعیت"])
-    
-    with tab1:
-        products = db.get_products(stock_filter="موجود")
-        centers = db.get_centers()
-        
-        if not products:
-            st.warning("کالای موجود نیست!")
-        elif not centers:
-            st.warning("مرکز فروش ثبت کنید!")
-        else:
-            with st.form("add_outflow"):
-                order_number = st.text_input("شماره سفارش")
-                
-                product_id = st.selectbox(
-                    "انتخاب کالا *",
-                    options=[p[0] for p in products],
-                    format_func=lambda x: next((f"[{p[0]}] {p[1]} - {p[2]} (موجودی: {p[4]})" for p in products if p[0] == x), str(x))
-                )
-                
-                center_id = st.selectbox(
-                    "مرکز فروش *",
-                    options=[c[0] for c in centers],
-                    format_func=lambda x: next((c[1] for c in centers if c[0] == x), str(x))
-                )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    quantity = st.number_input("تعداد *", min_value=0.01, value=1.0, step=1.0)
-                with col2:
-                    sell_price = st.number_input("قیمت فروش (تومان) *", min_value=0, value=0, step=1000)
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    commission = st.number_input("کمیسیون (تومان)", min_value=0, value=0, step=1000)
-                with col2:
-                    shipping = st.number_input("هزینه ارسال (تومان)", min_value=0, value=0, step=1000)
-                
-                st.markdown("**تاریخ خروجی:**")
-                year, month, day = persian_date_input("تاریخ", "outflow")
-                
-                # نمایش بهای تمام شده
-                if product_id and quantity > 0:
-                    cogs_unit, _ = db.calculate_fifo_cost(product_id, quantity)
-                    if cogs_unit:
-                        st.info(f"💰 بهای تمام شده واحد (FIFO): {cogs_unit:,.0f} تومان")
-                    else:
-                        st.warning("⚠️ موجودی کافی نیست!")
-                        cogs_unit = 0
-                else:
-                    cogs_unit = 0
-                
-                if st.form_submit_button("➕ ثبت خروجی", type="primary"):
-                    if product_id and center_id and quantity > 0 and sell_price > 0:
-                        product = next((p for p in products if p[0] == product_id), None)
-                        if product and product[4] >= quantity and cogs_unit:
-                            outflow_date = persian_to_gregorian(year, month, day)
-                            db.add_outflow(product_id, center_id, quantity, sell_price, cogs_unit, commission, shipping, outflow_date, order_number)
-                            st.success("✅ خروجی ثبت شد!")
-                            st.rerun()
-                        else:
-                            st.error("⚠️ موجودی کافی نیست!")
-                    else:
-                        st.error("فیلدهای ضروری را پر کنید!")
-    
-    with tab2:
-        st.markdown("**فیلترها:**")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            out_filter_return = st.selectbox("وضعیت برگشت", ["همه", "تحویل شده", "برگشت خورده"], key="out_ret")
-        with col2:
-            out_filter_paid = st.selectbox("وضعیت پرداخت", ["همه", "پرداخت شده", "در انتظار"], key="out_paid")
-        with col3:
-            centers = db.get_centers()
-            center_options = [(-1, "همه مراکز")] + [(c[0], c[1]) for c in centers]
-            out_filter_center = st.selectbox(
-                "مرکز فروش",
-                options=[c[0] for c in center_options],
-                format_func=lambda x: next((c[1] for c in center_options if c[0] == x), str(x)),
-                key="out_center"
-            )
-        
-        is_returned = None if out_filter_return == "همه" else (out_filter_return == "برگشت خورده")
-        is_paid = None if out_filter_paid == "همه" else (out_filter_paid == "پرداخت شده")
-        
-        outflows = db.get_outflows(
-            center_id=out_filter_center if out_filter_center > 0 else None,
-            is_returned=is_returned,
-            is_paid=is_paid
-        )
-        
-        if outflows:
-            data = []
-            total_revenue = total_profit = 0
-            for o in outflows:
-                revenue = o[5] * o[6]
-                profit = revenue - (o[5] * o[7]) - o[8] - o[9]
-                if not o[12]:  # اگر برگشتی نیست
-                    total_revenue += revenue
-                    total_profit += profit
-                data.append({
-                    'ID': o[0],
-                    'شماره سفارش': o[11] or '-',
-                    'کالا': f"{o[2]}" + (f" - {o[3]}" if o[3] else ""),
-                    'مرکز': o[4],
-                    'تعداد': o[5],
-                    'قیمت فروش': f"{o[6]:,.0f}",
-                    'بهای تمام شده': f"{o[7]:,.0f}",
-                    'کمیسیون': f"{o[8]:,.0f}",
-                    'ارسال': f"{o[9]:,.0f}",
-                    'سود': f"{profit:,.0f}",
-                    'تاریخ': gregorian_to_persian(o[10]),
-                    'برگشتی': '✅' if o[12] else '❌',
-                    'پرداخت': '✅' if o[13] else '❌'
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
-            st.info(f"📊 فروش: {total_revenue:,.0f} | سود: {total_profit:,.0f} | تعداد: {len(data)}")
-        else:
-            st.info("خروجی یافت نشد.")
-    
-    with tab3:
-        outflows = db.get_outflows()
-        if outflows:
-            selected_outflow = st.selectbox(
-                "انتخاب خروجی",
-                options=[o[0] for o in outflows],
-                format_func=lambda x: next((f"[{o[0]}] {o[11] or '-'} - {o[2]} - {gregorian_to_persian(o[10])}" for o in outflows if o[0] == x), str(x))
-            )
-            
-            outflow = next((o for o in outflows if o[0] == selected_outflow), None)
-            if outflow:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    status = "برگشت خورده ✅" if outflow[12] else "تحویل شده"
-                    if st.button(f"🔄 تغییر به {'تحویل شده' if outflow[12] else 'برگشت خورده'}"):
-                        db.toggle_outflow_return(selected_outflow)
-                        st.success("وضعیت برگشت تغییر کرد!")
-                        st.rerun()
-                with col2:
-                    status = "پرداخت شده ✅" if outflow[13] else "در انتظار پرداخت"
-                    if st.button(f"💰 تغییر به {'در انتظار' if outflow[13] else 'پرداخت شده'}"):
-                        db.toggle_outflow_paid(selected_outflow)
-                        st.success("وضعیت پرداخت تغییر کرد!")
-                        st.rerun()
-                with col3:
-                    if st.button("🗑️ حذف خروجی", type="secondary"):
-                        success, msg = db.delete_outflow(selected_outflow)
-                        if success:
-                            st.success(msg)
-                            st.rerun()
-                        else:
-                            st.error(msg)
+@app.route('/outflows/delete/<int:outflow_id>', methods=['POST'])
+def delete_outflow(outflow_id):
+    success, msg = db.delete_outflow(outflow_id)
+    flash(msg, 'success' if success else 'error')
+    return redirect(url_for('outflows'))
 
 
 # ==================== مراکز فروش ====================
-elif menu == "🏪 مراکز فروش":
-    st.markdown("# 🏪 مراکز فروش")
+@app.route('/centers')
+def centers():
+    centers_list = db.get_centers()
+    return render_template('centers.html', centers=centers_list)
+
+@app.route('/centers/add', methods=['POST'])
+def add_center():
+    name = request.form.get('name', '').strip()
+    shipping_type = request.form.get('shipping_type', 'manual')
+    shipping_percent = request.form.get('shipping_percent', 0, type=float)
+    shipping_min = request.form.get('shipping_min', 0, type=float)
+    shipping_max = request.form.get('shipping_max', 0, type=float)
+    shipping_fixed = request.form.get('shipping_fixed', 0, type=float)
     
-    tab1, tab2 = st.tabs(["➕ افزودن/ویرایش", "📋 لیست مراکز"])
+    if name:
+        db.add_center(name, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed)
+        flash('مرکز فروش اضافه شد', 'success')
     
-    with tab1:
-        with st.form("add_center"):
-            name = st.text_input("نام مرکز *")
-            
-            shipping_type = st.selectbox("نوع محاسبه ارسال", 
-                                        options=['manual', 'percent', 'fixed'],
-                                        format_func=lambda x: {'manual': 'دستی', 'percent': 'درصدی', 'fixed': 'ثابت'}[x])
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                shipping_percent = st.number_input("درصد ارسال", min_value=0.0, max_value=100.0, value=0.0)
-                shipping_min = st.number_input("حداقل ارسال", min_value=0, value=0)
-            with col2:
-                shipping_max = st.number_input("حداکثر ارسال", min_value=0, value=0)
-                shipping_fixed = st.number_input("هزینه ثابت", min_value=0, value=0)
-            
-            if st.form_submit_button("➕ افزودن مرکز", type="primary"):
-                if name:
-                    db.add_center(name, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed)
-                    st.success("✅ مرکز اضافه شد!")
-                    st.rerun()
+    return redirect(url_for('centers'))
+
+@app.route('/centers/edit/<int:center_id>', methods=['POST'])
+def edit_center(center_id):
+    name = request.form.get('name', '').strip()
+    shipping_type = request.form.get('shipping_type', 'manual')
+    shipping_percent = request.form.get('shipping_percent', 0, type=float)
+    shipping_min = request.form.get('shipping_min', 0, type=float)
+    shipping_max = request.form.get('shipping_max', 0, type=float)
+    shipping_fixed = request.form.get('shipping_fixed', 0, type=float)
     
-    with tab2:
-        centers = db.get_centers()
-        if centers:
-            data = []
-            for c in centers:
-                data.append({
-                    'ID': c[0],
-                    'نام': c[1],
-                    'نوع ارسال': {'manual': 'دستی', 'percent': 'درصدی', 'fixed': 'ثابت'}.get(c[2], c[2]),
-                    'درصد': f"{c[3]}%",
-                    'حداقل': f"{c[4]:,.0f}",
-                    'حداکثر': f"{c[5]:,.0f}",
-                    'ثابت': f"{c[6]:,.0f}"
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+    if name:
+        db.update_center(center_id, name, shipping_type, shipping_percent, shipping_min, shipping_max, shipping_fixed)
+        flash('مرکز فروش ویرایش شد', 'success')
+    
+    return redirect(url_for('centers'))
 
 
-# ==================== کمیسیون‌ها ====================
-elif menu == "💰 کمیسیون‌ها":
-    st.markdown("# 💰 تنظیمات کمیسیون")
+# ==================== کمیسیون ====================
+@app.route('/commissions')
+def commissions():
+    categories = db.get_categories()
+    centers = db.get_centers()
+    commissions_list = db.get_commissions()
+    products_list = db.get_products()
+    return render_template('commissions.html', categories=categories, centers=centers, 
+                          commissions=commissions_list, products=products_list)
+
+@app.route('/commissions/add_category', methods=['POST'])
+def add_category():
+    name = request.form.get('name', '').strip()
+    description = request.form.get('description', '').strip()
     
-    tab1, tab2, tab3 = st.tabs(["📂 دسته‌بندی‌ها", "⚙️ تنظیم کمیسیون", "🏷️ دسته‌بندی محصولات"])
+    if name:
+        db.add_category(name, description)
+        flash('دسته‌بندی اضافه شد', 'success')
     
-    with tab1:
-        with st.form("add_category"):
-            col1, col2 = st.columns(2)
-            with col1:
-                cat_name = st.text_input("نام دسته‌بندی")
-            with col2:
-                cat_desc = st.text_input("توضیحات")
-            if st.form_submit_button("➕ افزودن"):
-                if cat_name:
-                    db.add_category(cat_name, cat_desc)
-                    st.success("✅ اضافه شد!")
-                    st.rerun()
-        
-        categories = db.get_categories()
-        if categories:
-            df = pd.DataFrame(categories, columns=['ID', 'نام', 'توضیحات'])
-            st.dataframe(df, use_container_width=True, hide_index=True)
+    return redirect(url_for('commissions'))
+
+@app.route('/commissions/set', methods=['POST'])
+def set_commission():
+    center_id = request.form.get('center_id', type=int)
+    category_id = request.form.get('category_id', type=int)
+    percent = request.form.get('percent', 0, type=float)
     
-    with tab2:
-        centers = db.get_centers()
-        categories = db.get_categories()
-        
-        if centers and categories:
-            with st.form("set_commission"):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    center_id = st.selectbox("مرکز فروش", options=[c[0] for c in centers],
-                                            format_func=lambda x: next((c[1] for c in centers if c[0] == x), str(x)))
-                with col2:
-                    category_id = st.selectbox("دسته‌بندی", options=[c[0] for c in categories],
-                                              format_func=lambda x: next((c[1] for c in categories if c[0] == x), str(x)))
-                with col3:
-                    percent = st.number_input("درصد کمیسیون", min_value=0.0, max_value=100.0, value=0.0)
-                
-                if st.form_submit_button("💾 ذخیره"):
-                    db.set_commission(center_id, category_id, percent)
-                    st.success("✅ ذخیره شد!")
-                    st.rerun()
-            
-            # ماتریس کمیسیون
-            st.markdown("### 📊 ماتریس کمیسیون")
-            matrix_data = []
-            for cat in categories:
-                row = {'دسته‌بندی': cat[1]}
-                for center in centers:
-                    comm = db.execute_query(
-                        "SELECT commission_percent FROM commissions WHERE center_id = ? AND category_id = ?",
-                        (center[0], cat[0])
-                    )
-                    row[center[1]] = f"{comm[0][0]}%" if comm else "0%"
-                matrix_data.append(row)
-            st.dataframe(pd.DataFrame(matrix_data), use_container_width=True, hide_index=True)
+    if center_id and category_id:
+        db.set_commission(center_id, category_id, percent)
+        flash('کمیسیون ثبت شد', 'success')
     
-    with tab3:
-        products = db.get_products()
-        categories = db.get_categories()
-        
-        if products and categories:
-            with st.form("set_product_category"):
-                product_id = st.selectbox("محصول", options=[p[0] for p in products],
-                                         format_func=lambda x: next((f"[{p[0]}] {p[1]}" for p in products if p[0] == x), str(x)))
-                category_id = st.selectbox("دسته‌بندی", options=[c[0] for c in categories],
-                                          format_func=lambda x: next((c[1] for c in categories if c[0] == x), str(x)))
-                
-                if st.form_submit_button("💾 ذخیره"):
-                    db.set_product_category(product_id, category_id)
-                    st.success("✅ ذخیره شد!")
+    return redirect(url_for('commissions'))
+
+@app.route('/commissions/set_product_category', methods=['POST'])
+def set_product_category():
+    product_id = request.form.get('product_id', type=int)
+    category_id = request.form.get('category_id', type=int)
+    
+    if product_id and category_id:
+        db.set_product_category(product_id, category_id)
+        flash('دسته‌بندی محصول ثبت شد', 'success')
+    
+    return redirect(url_for('commissions'))
 
 
 # ==================== تسویه حساب ====================
-elif menu == "💵 تسویه حساب":
-    st.markdown("# 💵 تسویه حساب")
+@app.route('/settlements')
+def settlements():
+    centers = db.get_centers()
+    settlements_list = db.get_settlements()
+    debts = db.get_center_debts()
+    return render_template('settlements.html', centers=centers, settlements=settlements_list, debts=debts)
+
+@app.route('/settlements/add', methods=['POST'])
+def add_settlement():
+    center_id = request.form.get('center_id', type=int)
+    amount = request.form.get('amount', type=float)
+    description = request.form.get('description', '').strip()
+    year = request.form.get('year', type=int)
+    month = request.form.get('month', type=int)
+    day = request.form.get('day', type=int)
     
-    tab1, tab2, tab3 = st.tabs(["➕ ثبت تسویه", "📊 بدهی مراکز", "📋 تاریخچه"])
+    if center_id and amount:
+        settlement_date = persian_to_gregorian(year, month, day)
+        db.add_settlement(center_id, amount, settlement_date, description)
+        flash('تسویه ثبت شد', 'success')
     
-    with tab1:
-        centers = db.get_centers()
-        if centers:
-            with st.form("add_settlement"):
-                center_id = st.selectbox("مرکز فروش", options=[c[0] for c in centers],
-                                        format_func=lambda x: next((c[1] for c in centers if c[0] == x), str(x)))
-                amount = st.number_input("مبلغ (تومان)", min_value=0, value=0, step=10000)
-                description = st.text_input("توضیحات")
-                
-                st.markdown("**تاریخ تسویه:**")
-                year, month, day = persian_date_input("تاریخ", "settlement")
-                
-                if st.form_submit_button("➕ ثبت تسویه", type="primary"):
-                    if amount > 0:
-                        settlement_date = persian_to_gregorian(year, month, day)
-                        db.add_settlement(center_id, amount, settlement_date, description)
-                        st.success("✅ تسویه ثبت شد!")
-                        st.rerun()
-    
-    with tab2:
-        debts = db.get_center_debts()
-        if debts:
-            data = []
-            for cid, name, sales, comm, ship, settled in debts:
-                receivable = sales - comm - ship
-                debt = receivable - settled
-                data.append({
-                    'مرکز': name,
-                    'فروش': f"{sales:,.0f}",
-                    'کمیسیون+ارسال': f"{comm + ship:,.0f}",
-                    'قابل دریافت': f"{receivable:,.0f}",
-                    'تسویه شده': f"{settled:,.0f}",
-                    'بدهی': f"{debt:,.0f}"
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
-    
-    with tab3:
-        settlements = db.get_settlements()
-        if settlements:
-            data = []
-            for s in settlements:
-                data.append({
-                    'ID': s[0],
-                    'مرکز': s[1],
-                    'مبلغ': f"{s[2]:,.0f}",
-                    'تاریخ': gregorian_to_persian(s[3]),
-                    'توضیحات': s[4] or '-'
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+    return redirect(url_for('settlements'))
+
+@app.route('/settlements/delete/<int:settlement_id>', methods=['POST'])
+def delete_settlement(settlement_id):
+    db.delete_settlement(settlement_id)
+    flash('تسویه حذف شد', 'success')
+    return redirect(url_for('settlements'))
 
 
 # ==================== حساب نقدی ====================
-elif menu == "🏦 حساب نقدی":
-    st.markdown("# 🏦 حساب نقدی")
-    
+@app.route('/cash')
+def cash():
+    transactions = db.get_cash_transactions()
     deposits, withdraws, balance = db.get_cash_summary()
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("💵 مجموع واریزها", f"{deposits:,.0f} تومان")
-    with col2:
-        st.metric("💸 مجموع برداشت‌ها", f"{withdraws:,.0f} تومان")
-    with col3:
-        st.metric("🏦 موجودی", f"{balance:,.0f} تومان", delta="مثبت" if balance >= 0 else "منفی")
-    
-    tab1, tab2 = st.tabs(["➕ ثبت تراکنش", "📋 تاریخچه"])
-    
-    with tab1:
-        with st.form("add_cash"):
-            trans_type = st.selectbox("نوع تراکنش", options=['deposit', 'withdraw'],
-                                     format_func=lambda x: {'deposit': '📥 واریز', 'withdraw': '📤 برداشت'}[x])
-            amount = st.number_input("مبلغ (تومان)", min_value=0, value=0, step=10000)
-            
-            if trans_type == 'deposit':
-                source = st.selectbox("از کجا", ["اسنپ شاپ", "دیجی کالا", "نایتو", "فروش حضوری", "سایر"])
-            else:
-                source = st.selectbox("برای چی", ["خرید کالا", "هزینه ارسال", "هزینه بسته‌بندی", "سایر"])
-            
-            description = st.text_input("توضیحات")
-            
-            st.markdown("**تاریخ:**")
-            year, month, day = persian_date_input("تاریخ", "cash")
-            
-            if st.form_submit_button("➕ ثبت", type="primary"):
-                if amount > 0:
-                    trans_date = persian_to_gregorian(year, month, day)
-                    db.add_cash_transaction(trans_type, amount, source, description, trans_date)
-                    st.success("✅ ثبت شد!")
-                    st.rerun()
-    
-    with tab2:
-        filter_type = st.selectbox("فیلتر", ["all", "deposit", "withdraw"],
-                                  format_func=lambda x: {'all': 'همه', 'deposit': 'واریزها', 'withdraw': 'برداشت‌ها'}[x])
-        
-        transactions = db.get_cash_transactions(filter_type)
-        if transactions:
-            data = []
-            for t in transactions:
-                data.append({
-                    'ID': t[0],
-                    'نوع': '📥 واریز' if t[1] == 'deposit' else '📤 برداشت',
-                    'مبلغ': f"{t[2]:,.0f}",
-                    'منبع/مقصد': t[3],
-                    'توضیحات': t[4] or '-',
-                    'تاریخ': gregorian_to_persian(t[5])
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+    return render_template('cash.html', transactions=transactions, 
+                          deposits=deposits, withdraws=withdraws, balance=balance)
 
+@app.route('/cash/add', methods=['POST'])
+def add_cash_transaction():
+    trans_type = request.form.get('type', 'deposit')
+    amount = request.form.get('amount', type=float)
+    source = request.form.get('source', '').strip()
+    description = request.form.get('description', '').strip()
+    year = request.form.get('year', type=int)
+    month = request.form.get('month', type=int)
+    day = request.form.get('day', type=int)
+    
+    if amount:
+        trans_date = persian_to_gregorian(year, month, day)
+        db.add_cash_transaction(trans_type, amount, source, description, trans_date)
+        flash('تراکنش ثبت شد', 'success')
+    
+    return redirect(url_for('cash'))
 
-# ==================== قیمت‌گذاری ====================
-elif menu == "💲 قیمت‌گذاری":
-    st.markdown("# 💲 قیمت‌گذاری با نرخ دلار")
-    
-    centers = db.get_centers()
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        new_dollar_rate = st.number_input("💵 نرخ دلار فعلی (تومان)", min_value=1, value=100000, step=1000)
-    with col2:
-        target_profit = st.number_input("📈 درصد سود مورد نظر", min_value=0.0, max_value=500.0, value=20.0)
-    with col3:
-        if centers:
-            pricing_center = st.selectbox(
-                "🏪 مرکز فروش",
-                options=[c[0] for c in centers],
-                format_func=lambda x: next((c[1] for c in centers if c[0] == x), str(x))
-            )
-        else:
-            pricing_center = None
-    
-    if st.button("🔄 محاسبه قیمت‌ها", type="primary"):
-        if not pricing_center:
-            st.error("مرکز فروش انتخاب کنید!")
-        else:
-            products = db.execute_query("""
-                SELECT p.id, p.name, p.color,
-                       COALESCE((SELECT buy_price FROM inflows WHERE product_id = p.id ORDER BY inflow_date DESC, id DESC LIMIT 1), 0),
-                       COALESCE((SELECT dollar_rate FROM inflows WHERE product_id = p.id ORDER BY inflow_date DESC, id DESC LIMIT 1), 0)
-                FROM products p ORDER BY p.name
-            """)
-            
-            if products:
-                pricing_data = []
-                for pid, name, color, buy_price, old_rate in products:
-                    commission_percent = db.get_product_commission(pricing_center, pid) / 100
-                    
-                    if old_rate and old_rate > 0:
-                        new_buy_price = buy_price * (new_dollar_rate / old_rate)
-                    else:
-                        new_buy_price = buy_price
-                    
-                    shipping = db.calculate_shipping_cost(pricing_center, new_buy_price * 1.5, 1)
-                    
-                    if commission_percent < 1:
-                        suggested_price = (new_buy_price * (1 + target_profit / 100) + shipping) / (1 - commission_percent)
-                    else:
-                        suggested_price = new_buy_price * (1 + target_profit / 100) + shipping
-                    
-                    commission_amount = suggested_price * commission_percent
-                    net_profit = suggested_price - new_buy_price - commission_amount - shipping
-                    
-                    pricing_data.append({
-                        'کد': pid,
-                        'نام': name,
-                        'رنگ': color or '-',
-                        'قیمت خرید': f"{buy_price:,.0f}",
-                        'نرخ دلار خرید': f"{old_rate:,.0f}" if old_rate else '-',
-                        'قیمت خرید جدید': f"{new_buy_price:,.0f}",
-                        'کمیسیون %': f"{commission_percent*100:.1f}%",
-                        'کمیسیون': f"{commission_amount:,.0f}",
-                        'ارسال': f"{shipping:,.0f}",
-                        'قیمت فروش پیشنهادی': f"{suggested_price:,.0f}",
-                        'سود خالص': f"{net_profit:,.0f}"
-                    })
-                
-                st.dataframe(pd.DataFrame(pricing_data), use_container_width=True, hide_index=True)
-    
-    st.markdown("""
-    ---
-    **💡 راهنما:**
-    - قیمت خرید جدید = قیمت خرید × (نرخ دلار فعلی ÷ نرخ دلار زمان خرید)
-    - قیمت فروش طوری محاسبه شده که بعد از کسر کمیسیون و ارسال، سود مورد نظر باقی بماند
-    - اگر نرخ دلار در ورودی ثبت نشده، قیمت جدید = قیمت خرید
-    """)
+@app.route('/cash/delete/<int:trans_id>', methods=['POST'])
+def delete_cash_transaction(trans_id):
+    db.delete_cash_transaction(trans_id)
+    flash('تراکنش حذف شد', 'success')
+    return redirect(url_for('cash'))
 
 
 # ==================== گزارشات ====================
-elif menu == "📊 گزارشات":
-    st.markdown("# 📊 گزارشات")
+@app.route('/reports')
+def reports():
+    stats = db.get_dashboard_stats()
+    products_list = db.get_products()
+    centers = db.get_centers()
     
-    tab1, tab2, tab3 = st.tabs(["📈 سود و زیان", "📦 موجودی", "🏪 عملکرد مراکز"])
+    # آمار مراکز
+    center_stats = []
+    for center in centers:
+        result = db.execute_query("""
+            SELECT COUNT(*) as count, COALESCE(SUM(quantity), 0) as qty, 
+                   COALESCE(SUM(quantity * sell_price), 0) as sales,
+                   COALESCE(SUM((quantity * sell_price) - (quantity * cogs_unit) - commission_amount - shipping_cost), 0) as profit
+            FROM outflows WHERE center_id = ? AND is_returned = 0
+        """, (center['id'],))
+        if result:
+            center_stats.append({
+                'name': center['name'],
+                'count': result[0]['count'],
+                'qty': result[0]['qty'],
+                'sales': result[0]['sales'],
+                'profit': result[0]['profit']
+            })
     
-    with tab1:
-        stats = db.get_dashboard_stats()
-        
-        st.markdown("### 📈 گزارش سود و زیان")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("💵 فروش", f"{stats['revenue']:,.0f}")
-            st.metric("📦 بهای تمام شده", f"{stats['cogs']:,.0f}")
-        with col2:
-            st.metric("📈 سود ناخالص", f"{stats['revenue'] - stats['cogs']:,.0f}")
-            st.metric("💳 کمیسیون", f"{stats['commission']:,.0f}")
-        with col3:
-            st.metric("🚚 ارسال", f"{stats['shipping']:,.0f}")
-            st.metric("✅ سود خالص", f"{stats['profit']:,.0f}")
-    
-    with tab2:
-        st.markdown("### 📦 گزارش موجودی")
-        products = db.get_products()
-        if products:
-            data = []
-            total_value = 0
-            for p in products:
-                inflows = db.execute_query(
-                    "SELECT remaining, buy_price FROM inflows WHERE product_id = ? AND remaining > 0",
-                    (p[0],)
-                )
-                value = sum(r[0] * r[1] for r in inflows) if inflows else 0
-                total_value += value
-                data.append({
-                    'کد': p[0],
-                    'نام': p[1],
-                    'رنگ': p[2] or '-',
-                    'موجودی': p[4],
-                    'ارزش': f"{value:,.0f}"
-                })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
-            st.info(f"📊 کل ارزش موجودی: {total_value:,.0f} تومان")
-    
-    with tab3:
-        st.markdown("### 🏪 عملکرد مراکز")
-        centers = db.get_centers()
-        if centers:
-            data = []
-            for c in centers:
-                result = db.execute_query("""
-                    SELECT COUNT(*), COALESCE(SUM(quantity), 0), COALESCE(SUM(quantity * sell_price), 0),
-                           COALESCE(SUM((quantity * sell_price) - (quantity * cogs_unit) - commission_amount - shipping_cost), 0)
-                    FROM outflows WHERE center_id = ? AND is_returned = 0
-                """, (c[0],))
-                if result and result[0]:
-                    data.append({
-                        'مرکز': c[1],
-                        'تعداد سفارش': result[0][0],
-                        'تعداد کالا': result[0][1],
-                        'فروش': f"{result[0][2]:,.0f}",
-                        'سود': f"{result[0][3]:,.0f}"
-                    })
-            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+    return render_template('reports.html', stats=stats, products=products_list, center_stats=center_stats)
 
 
-# ==================== مدیریت داده ====================
-elif menu == "⚙️ مدیریت داده":
-    st.markdown("# ⚙️ مدیریت داده")
-    
-    st.warning("⚠️ در Streamlit Cloud دیتابیس پایدار نیست! حتماً بکاپ بگیرید.")
-    
-    st.markdown("### 📥 خروجی اکسل")
-    
-    export_type = st.selectbox("انتخاب داده", 
-                              options=['products', 'inflows', 'outflows', 'settlements', 'cash'],
-                              format_func=lambda x: {
-                                  'products': '📦 موجودی',
-                                  'inflows': '📥 ورودی‌ها',
-                                  'outflows': '📤 خروجی‌ها',
-                                  'settlements': '💵 تسویه‌ها',
-                                  'cash': '🏦 تراکنش‌های نقدی'
-                              }[x])
-    
-    if st.button("📥 دانلود اکسل"):
-        if export_type == 'products':
-            data = db.get_products()
-            df = pd.DataFrame(data, columns=['ID', 'نام', 'رنگ', 'بارکد', 'موجودی'])
-        elif export_type == 'inflows':
-            data = db.get_inflows()
-            df = pd.DataFrame(data, columns=['ID', 'کد کالا', 'نام', 'رنگ', 'تعداد', 'قیمت', 'تاریخ', 'باقیمانده', 'نرخ دلار'])
-        elif export_type == 'outflows':
-            data = db.get_outflows()
-            df = pd.DataFrame(data, columns=['ID', 'کد کالا', 'نام', 'رنگ', 'مرکز', 'تعداد', 'قیمت فروش', 'بهای تمام شده', 'کمیسیون', 'ارسال', 'تاریخ', 'شماره سفارش', 'برگشتی', 'پرداخت', 'center_id'])
-        elif export_type == 'settlements':
-            data = db.get_settlements()
-            df = pd.DataFrame(data, columns=['ID', 'مرکز', 'مبلغ', 'تاریخ', 'توضیحات'])
-        elif export_type == 'cash':
-            data = db.get_cash_transactions()
-            df = pd.DataFrame(data, columns=['ID', 'نوع', 'مبلغ', 'منبع', 'توضیحات', 'تاریخ'])
-        
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Sheet1')
-        
-        st.download_button(
-            label="📥 دانلود",
-            data=output.getvalue(),
-            file_name=f"{export_type}_{jdatetime.date.today().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+# ==================== API برای AJAX ====================
+@app.route('/api/fifo_cost/<int:product_id>/<float:quantity>')
+def api_fifo_cost(product_id, quantity):
+    cogs, _ = db.calculate_fifo_cost(product_id, quantity)
+    return jsonify({'cogs': cogs})
+
+@app.route('/api/product_stock/<int:product_id>')
+def api_product_stock(product_id):
+    product = db.get_product(product_id)
+    if product:
+        return jsonify({'stock': product['stock']})
+    return jsonify({'stock': 0})
+
+
+# ==================== بکاپ ====================
+@app.route('/backup/download')
+def download_backup():
+    if os.path.exists(DB_PATH):
+        return send_file(
+            DB_PATH,
+            as_attachment=True,
+            download_name=f"warehouse_backup_{get_persian_today().strftime('%Y%m%d')}.db"
         )
+    flash('فایل دیتابیس یافت نشد', 'error')
+    return redirect(url_for('dashboard'))
+
+@app.route('/backup/upload', methods=['POST'])
+def upload_backup():
+    if 'file' not in request.files:
+        flash('فایلی انتخاب نشده', 'error')
+        return redirect(url_for('dashboard'))
     
-    st.markdown("---")
-    st.info(f"📅 تاریخ: {get_persian_today().strftime('%Y/%m/%d')} | نسخه: 2.0 Full")
+    file = request.files['file']
+    if file.filename == '':
+        flash('فایلی انتخاب نشده', 'error')
+        return redirect(url_for('dashboard'))
+    
+    if file:
+        os.makedirs(os.path.dirname(DB_PATH) if os.path.dirname(DB_PATH) else '.', exist_ok=True)
+        file.save(DB_PATH)
+        global db
+        db = DBManager()
+        flash('دیتابیس بازیابی شد', 'success')
+    
+    return redirect(url_for('dashboard'))
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)

@@ -1,36 +1,32 @@
-# استفاده از Python 3.11 slim
+# Python 3.11 slim
 FROM python:3.11-slim
 
-# تنظیم متغیرهای محیطی
+# متغیرهای محیطی
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
 
-# تنظیم دایرکتوری کاری
+# دایرکتوری کاری
 WORKDIR /app
 
-# نصب وابستگی‌های سیستمی
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# کپی فایل requirements و نصب وابستگی‌ها
+# نصب وابستگی‌ها
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# کپی کد برنامه
+# کپی فایل‌ها
 COPY app.py .
+COPY templates/ templates/
 
-# ایجاد دایرکتوری برای دیتابیس
+# ایجاد پوشه دیتابیس
 RUN mkdir -p /app/data
+ENV DB_PATH=/app/data/warehouse.db
 
-# تنظیم volume برای ذخیره دائمی دیتابیس
+# Volume برای دیتابیس
 VOLUME ["/app/data"]
 
-# پورت Streamlit
-EXPOSE 8501
+# پورت
+EXPOSE 5000
 
-# تنظیم healthcheck
-HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
-
-# اجرای برنامه
-ENTRYPOINT ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# اجرا با gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]

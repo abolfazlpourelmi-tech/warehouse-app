@@ -3,22 +3,15 @@ version: '3.8'
 services:
   warehouse:
     build: .
-    container_name: warehouse-manager
+    container_name: warehouse-flask
     ports:
-      - "8501:8501"
+      - "5000:5000"
     volumes:
-      # ذخیره دائمی دیتابیس
       - warehouse_data:/app/data
-      # یا برای ذخیره در پوشه محلی:
-      # - ./data:/app/data
     environment:
       - TZ=Asia/Tehran
+      - DB_PATH=/app/data/warehouse.db
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 volumes:
   warehouse_data:
